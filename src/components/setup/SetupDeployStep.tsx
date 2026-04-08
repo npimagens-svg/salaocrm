@@ -203,7 +203,22 @@ export default function SetupDeployStep({ data, updateData, onDone, onBack, toas
         await extServiceClient.from("commission_settings").insert({ salon_id: extSalonId });
       }
 
-      // ── PHASE 4: Set Vercel env vars ──
+      // ── PHASE 4: Resolve Vercel project name to ID ──
+      setStatusMsg("⚙️ Conectando com a Vercel...");
+      let resolvedProjectId = data.vercelProjectId.trim();
+      if (!resolvedProjectId.startsWith("prj_")) {
+        const projRes = await fetch(
+          `https://api.vercel.com/v9/projects/${encodeURIComponent(resolvedProjectId)}`,
+          { headers: { Authorization: `Bearer ${data.vercelToken.trim()}` } }
+        );
+        if (!projRes.ok) {
+          throw new Error("Projeto não encontrado na Vercel. Verifique o nome do projeto.");
+        }
+        const projData = await projRes.json();
+        resolvedProjectId = projData.id;
+      }
+
+      // ── PHASE 5: Set Vercel env vars ──
       setStatusMsg("⚙️ Configurando variáveis na Vercel...");
       const projectRef = extractProjectRef(data.supabaseUrl);
       const envVars = [
@@ -213,12 +228,12 @@ export default function SetupDeployStep({ data, updateData, onDone, onBack, toas
       ];
 
       for (const env of envVars) {
-        await upsertVercelEnv(data.vercelToken, data.vercelProjectId, env.key, env.value);
+        await upsertVercelEnv(data.vercelToken, resolvedProjectId, env.key, env.value);
       }
 
-      // ── PHASE 5: Trigger Vercel redeploy ──
+      // ── PHASE 6: Trigger Vercel redeploy ──
       setStatusMsg("🚀 Fazendo redeploy na Vercel...");
-      await triggerVercelRedeploy(data.vercelToken, data.vercelProjectId);
+      await triggerVercelRedeploy(data.vercelToken, resolvedProjectId);
 
       toast({ title: "🎉 Setup concluído! Redeploy em andamento." });
       onDone();
@@ -311,11 +326,11 @@ export default function SetupDeployStep({ data, updateData, onDone, onBack, toas
               />
             </div>
             <div className="space-y-2">
-              <Label>Vercel Project ID *</Label>
+              <Label>Nome do Projeto na Vercel *</Label>
               <Input
                 value={data.vercelProjectId}
                 onChange={(e) => updateData({ vercelProjectId: e.target.value })}
-                placeholder="prj_xxxxxxxxxxxxxxxxxxxxx"
+                placeholder="salaocrm"
               />
             </div>
           </div>
@@ -396,11 +411,25 @@ async function upsertVercelEnv(token: string, projectId: string, key: string, va
   }
 }
 
-async function triggerVercelRedeploy(token: string, projectId: string) {
+async function triggerVercelRedeploy(token: string, projectNameOrId: string) {
   const headers = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
+
+  // Resolve project name to ID if needed
+  let projectId = projectNameOrId;
+  if (!projectNameOrId.startsWith("prj_")) {
+    const projRes = await fetch(
+      `https://api.vercel.com/v9/projects/${encodeURIComponent(projectNameOrId)}`,
+      { headers }
+    );
+    if (!projRes.ok) {
+      throw new Error("Projeto não encontrado na Vercel. Verifique o nome do projeto.");
+    }
+    const projData = await projRes.json();
+    projectId = projData.id;
+  }
 
   const listRes = await fetch(
     `https://api.vercel.com/v6/deployments?projectId=${projectId}&limit=1&state=READY`,
@@ -408,7 +437,7 @@ async function triggerVercelRedeploy(token: string, projectId: string) {
   );
 
   if (!listRes.ok) {
-    throw new Error("Não foi possível listar deployments da Vercel. Verifique o Token e Project ID.");
+    throw new Error("Não foi possível listar deployments da Vercel. Verifique o Token e o nome do projeto.");
   }
 
   const listData = await listRes.json();
