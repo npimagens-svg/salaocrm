@@ -1724,10 +1724,12 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                 <Card>
                   <CardContent className="p-4">
                     <Label className="text-xs text-muted-foreground">Diferença:</Label>
-                    <p className={`text-xl font-semibold ${difference > 0 ? 'text-destructive' : difference < 0 ? 'text-green-600' : 'text-foreground'}`}>
+                    <p className={`text-lg font-semibold whitespace-nowrap ${difference > 0 ? 'text-destructive' : difference < 0 ? 'text-green-600' : 'text-foreground'}`}>
                       {formatCurrency(Math.abs(difference))}
-                      {difference < 0 && ' (troco)'}
-                      {difference > 0 && ' (falta)'}
+                      <span className="text-xs font-normal ml-1">
+                        {difference < 0 && '(troco)'}
+                        {difference > 0 && '(falta)'}
+                      </span>
                     </p>
                   </CardContent>
                 </Card>
@@ -1819,28 +1821,28 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
               {/* Payment Methods */}
               <Card>
                 <CardContent className="p-4 space-y-4">
-                  <div className="grid grid-cols-6 gap-3 text-sm font-medium text-muted-foreground border-b pb-2">
-                    <span></span>
-                    <span>Forma de Pagamento</span>
-                    <span>Banco/Bandeira</span>
-                    <span>Observações</span>
-                    <span>Valor (R$)</span>
-                    <span></span>
+                  <div className="flex gap-2 text-sm font-medium text-muted-foreground border-b pb-2">
+                    <span className="w-8 shrink-0"></span>
+                    <span className="w-[140px] shrink-0">Forma de Pagamento</span>
+                    <span className="flex-1 min-w-0">Banco/Bandeira</span>
+                    <span className="w-[100px] shrink-0">Observações</span>
+                    <span className="w-[100px] shrink-0">Valor (R$)</span>
+                    <span className="w-10 shrink-0"></span>
                   </div>
                   
                   {payments.map((payment, index) => (
-                    <div key={payment.id} className="grid grid-cols-6 gap-3 items-center">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-destructive"
+                    <div key={payment.id} className="flex gap-2 items-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-destructive"
                         onClick={() => removePaymentRow(payment.id)}
                       >
                         <Minus className="h-4 w-4" />
                       </Button>
-                      <Select 
-                        value={payment.method} 
-                        onValueChange={(v) => {
+                      <Select
+                        value={payment.method}
+                        onValueChange={(v: string) => {
                           updatePayment(payment.id, 'method', v);
                           // Clear bank account/card brand when changing method
                           if (v !== 'pix') {
@@ -1854,7 +1856,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                           }
                         }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-[140px] shrink-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1865,83 +1867,87 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                           ))}
                         </SelectContent>
                       </Select>
-                      
+
                       {/* Bank/Card Brand Selection */}
-                      {payment.method === 'pix' ? (
-                        <Select 
-                          value={payment.bankAccountId || ""} 
-                          onValueChange={(v) => updatePayment(payment.id, 'bankAccountId', v || null)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o banco" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {bankAccounts.filter(b => b.is_active).map((bank) => (
-                              <SelectItem key={bank.id} value={bank.id}>
-                                {bank.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (payment.method === 'credit_card' || payment.method === 'debit_card') ? (
-                        <>
+                      <div className="flex-1 min-w-0 flex gap-2">
+                        {payment.method === 'pix' ? (
                           <Select
-                            value={payment.cardBrandId || ""}
-                            onValueChange={(v) => updatePayment(payment.id, 'cardBrandId', v || null)}
+                            value={payment.bankAccountId || ""}
+                            onValueChange={(v) => updatePayment(payment.id, 'bankAccountId', v || null)}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Bandeira" />
+                              <SelectValue placeholder="Selecione o banco" />
                             </SelectTrigger>
                             <SelectContent>
-                              {cardBrands.filter(b => b.is_active).map((brand) => {
-                                const feePercent = getCardFeePercent(brand, payment.method as 'credit_card' | 'debit_card', payment.installments || 1);
-                                return (
-                                  <SelectItem key={brand.id} value={brand.id}>
-                                    {brand.name} ({feePercent}%)
-                                  </SelectItem>
-                                );
-                              })}
+                              {bankAccounts.filter(b => b.is_active).map((bank) => (
+                                <SelectItem key={bank.id} value={bank.id}>
+                                  {bank.name}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
-                          {payment.method === 'credit_card' && (
+                        ) : (payment.method === 'credit_card' || payment.method === 'debit_card') ? (
+                          <>
                             <Select
-                              value={String(payment.installments || 1)}
-                              onValueChange={(v) => updatePayment(payment.id, 'installments', parseInt(v))}
+                              value={payment.cardBrandId || ""}
+                              onValueChange={(v) => updatePayment(payment.id, 'cardBrandId', v || null)}
                             >
-                              <SelectTrigger className="w-[90px]">
-                                <SelectValue />
+                              <SelectTrigger className="min-w-0">
+                                <SelectValue placeholder="Bandeira" />
                               </SelectTrigger>
                               <SelectContent>
-                                {INSTALLMENT_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt.value} value={String(opt.value)}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
+                                {cardBrands.filter(b => b.is_active).map((brand) => {
+                                  const feePercent = getCardFeePercent(brand, payment.method as 'credit_card' | 'debit_card', payment.installments || 1);
+                                  return (
+                                    <SelectItem key={brand.id} value={brand.id}>
+                                      {brand.name} ({feePercent}%)
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
-                          )}
-                        </>
-                      ) : (
-                        <div />
-                      )}
-                      
-                      <Input 
+                            {payment.method === 'credit_card' && (
+                              <Select
+                                value={String(payment.installments || 1)}
+                                onValueChange={(v) => updatePayment(payment.id, 'installments', parseInt(v))}
+                              >
+                                <SelectTrigger className="w-[80px] shrink-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {INSTALLMENT_OPTIONS.map((opt) => (
+                                    <SelectItem key={opt.value} value={String(opt.value)}>
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex-1" />
+                        )}
+                      </div>
+
+                      <Input
                         placeholder="Observações"
                         value={payment.info}
                         onChange={(e) => updatePayment(payment.id, 'info', e.target.value)}
+                        className="w-[100px] shrink-0"
                       />
-                      
-                      <Input 
+
+                      <Input
                         type="number"
                         step="0.01"
                         value={payment.amount || ""}
                         onChange={(e) => updatePayment(payment.id, 'amount', parseFloat(e.target.value) || 0)}
-                        className="text-right"
+                        className="w-[100px] shrink-0 text-right"
                       />
-                      
-                      <Button 
-                        variant="outline" 
+
+                      <Button
+                        variant="outline"
                         size="sm"
+                        className="shrink-0"
                         onClick={() => updatePayment(payment.id, 'amount', subtotal - totalPayments + payment.amount)}
                       >
                         Dif
