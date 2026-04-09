@@ -88,8 +88,11 @@ export function ComandaServiceProducts({
     onProductUsageChange(serviceId, productUsages);
     setIsDirty(false);
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
-  }, [serviceId, productUsages, onProductUsageChange]);
+    setTimeout(() => {
+      setIsSaved(false);
+      onToggleExpand();
+    }, 800);
+  }, [serviceId, productUsages, onProductUsageChange, onToggleExpand]);
 
   // Auto-save on initialization to ensure product_cost is always set
   useEffect(() => {
