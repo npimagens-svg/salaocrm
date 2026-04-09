@@ -23,7 +23,7 @@ import { useProfessionals } from "@/hooks/useProfessionals";
 import { useCepLookup } from "@/hooks/useCepLookup";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, ChevronDown, ChevronUp, Eye } from "lucide-react";
 import { AvatarUpload } from "@/components/shared/AvatarUpload";
 import { ClientPackagesTab } from "@/components/clients/ClientPackagesTab";
 import { ClientFinanceTab } from "@/components/clients/ClientFinanceTab";
@@ -202,7 +202,7 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{client ? "Editar Cliente" : "Cadastre um novo cliente"}</DialogTitle>
         </DialogHeader>
@@ -597,6 +597,7 @@ interface ClientComandasTabProps {
 function ClientComandasTab({ clientId }: ClientComandasTabProps) {
   const { comandas, isLoading } = useClientComandas(clientId);
   const { professionals } = useProfessionals();
+  const [expandedComanda, setExpandedComanda] = useState<string | null>(null);
 
   const getProfessionalName = (professionalId: string | null) => {
     if (!professionalId) return "—";
@@ -610,10 +611,14 @@ function ClientComandasTab({ clientId }: ClientComandasTabProps) {
       pix: "PIX",
       credit_card: "Cartão de Crédito",
       debit_card: "Cartão de Débito",
+      transfer: "Transferência",
+      voucher: "Voucher",
       other: "Outro",
     };
     return methods[method] || method;
   };
+
+  const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
   if (isLoading) {
     return (
@@ -632,70 +637,116 @@ function ClientComandasTab({ clientId }: ClientComandasTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <p className="text-sm text-muted-foreground">Histórico de atendimentos e compras do cliente.</p>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Data</TableHead>
-            <TableHead>Profissional</TableHead>
-            <TableHead>Serviços/Produtos</TableHead>
-            <TableHead>Pagamento</TableHead>
-            <TableHead className="text-right">Total</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {comandas.map((comanda: any) => (
-            <TableRow key={comanda.id}>
-              <TableCell>
-                {format(new Date(comanda.created_at), "dd/MM/yyyy", { locale: ptBR })}
-              </TableCell>
-              <TableCell>
-                {comanda.professional?.name || getProfessionalName(comanda.professional_id)}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {comanda.items?.slice(0, 2).map((item: any) => (
-                    <Badge key={item.id} variant="outline" className="text-xs">
-                      {item.description}
+      {comandas.map((comanda: any) => {
+        const isExpanded = expandedComanda === comanda.id;
+        const date = format(new Date(comanda.created_at), "dd/MM/yyyy", { locale: ptBR });
+        const profName = comanda.professional?.name || getProfessionalName(comanda.professional_id);
+        const items = comanda.items || [];
+        const payments = comanda.payments || [];
+
+        return (
+          <div key={comanda.id} className="border rounded-lg overflow-hidden">
+            {/* Summary row */}
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+              onClick={() => setExpandedComanda(isExpanded ? null : comanda.id)}
+            >
+              <span className="font-semibold text-primary whitespace-nowrap">{date}</span>
+              <span className="text-sm text-muted-foreground truncate">{profName}</span>
+              <div className="flex-1 min-w-0 flex gap-1 flex-wrap">
+                {items.slice(0, 2).map((item: any) => (
+                  <Badge key={item.id} variant="outline" className="text-xs truncate max-w-[150px]">
+                    {item.description}
+                  </Badge>
+                ))}
+                {items.length > 2 && (
+                  <Badge variant="secondary" className="text-xs">+{items.length - 2}</Badge>
+                )}
+              </div>
+              <span className="font-semibold whitespace-nowrap">{formatCurrency(comanda.total || 0)}</span>
+              <Badge variant={comanda.is_paid ? "default" : "secondary"} className="text-xs shrink-0">
+                {comanda.is_paid ? "Pago" : "Aberto"}
+              </Badge>
+              {isExpanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+            </button>
+
+            {/* Expanded details */}
+            {isExpanded && (
+              <div className="border-t bg-muted/20 px-4 py-3 space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Comanda</span>
+                    <span className="font-medium">Nº {String(comanda.comanda_number || "—").padStart(4, "0")}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Profissional</span>
+                    <span className="font-medium">{profName}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Total</span>
+                    <span className="font-medium">{formatCurrency(comanda.total || 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Status</span>
+                    <Badge variant={comanda.is_paid ? "default" : "secondary"}>
+                      {comanda.is_paid ? "Pago" : "Em aberto"}
                     </Badge>
-                  ))}
-                  {comanda.items?.length > 2 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{comanda.items.length - 2}
-                    </Badge>
-                  )}
-                  {(!comanda.items || comanda.items.length === 0) && (
-                    <span className="text-muted-foreground text-sm">—</span>
-                  )}
+                  </div>
                 </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {comanda.payments?.length > 0 ? (
-                    comanda.payments.map((p: any) => (
-                      <Badge key={p.id} variant="outline" className="text-xs">
-                        {formatPaymentMethod(p.payment_method)} R$ {Number(p.amount).toFixed(2)}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-muted-foreground text-sm">—</span>
-                  )}
+
+                {/* Services/Items */}
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Itens</span>
+                  <div className="mt-1 divide-y">
+                    {items.map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between py-1.5 text-sm">
+                        <div className="flex-1">
+                          <span>{item.quantity > 1 ? `${item.quantity}x ` : ""}{item.description}</span>
+                          {item.professional?.name && item.professional_id !== comanda.professional_id && (
+                            <span className="text-xs text-muted-foreground ml-2">({item.professional.name})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {item.product_cost > 0 && (
+                            <span className="text-xs text-destructive">Prod: -{formatCurrency(item.product_cost)}</span>
+                          )}
+                          <span className="font-medium">{formatCurrency(item.total_price || 0)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {items.length === 0 && (
+                      <p className="text-sm text-muted-foreground py-2">Nenhum item registrado</p>
+                    )}
+                  </div>
                 </div>
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                R$ {comanda.total?.toFixed(2) || "0.00"}
-              </TableCell>
-              <TableCell>
-                <Badge variant={comanda.is_paid ? "default" : "secondary"}>
-                  {comanda.is_paid ? "Pago" : "Em aberto"}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+
+                {/* Payments */}
+                {payments.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pagamentos</span>
+                    <div className="mt-1 divide-y">
+                      {payments.map((p: any) => (
+                        <div key={p.id} className="flex items-center justify-between py-1.5 text-sm">
+                          <span>{formatPaymentMethod(p.payment_method)}</span>
+                          <div className="flex items-center gap-2">
+                            {p.fee_amount > 0 && (
+                              <span className="text-xs text-destructive">Taxa: -{formatCurrency(p.fee_amount)}</span>
+                            )}
+                            <span className="font-medium">{formatCurrency(Number(p.amount) || 0)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
