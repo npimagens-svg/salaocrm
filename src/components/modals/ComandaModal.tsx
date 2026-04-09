@@ -313,7 +313,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
-  // Handler for product usage changes in service items — persists product_cost to DB
+  // Handler for product usage changes in service items — persists product_cost + individual products to DB
   const handleProductUsageChange = useCallback(async (serviceId: string, products: ProductUsage[]) => {
     setServiceProductUsages(prev => ({
       ...prev,
@@ -329,6 +329,24 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       .from("comanda_items")
       .update({ product_cost: totalCost })
       .eq("id", item.id);
+
+    // Persist individual product rows: delete old + insert new
+    await supabase.from("comanda_item_products").delete().eq("comanda_item_id", item.id);
+    if (products.length > 0) {
+      await supabase.from("comanda_item_products").insert(
+        products.map(p => ({
+          comanda_item_id: item.id,
+          product_id: p.product_id,
+          product_name: p.product_name,
+          quantity_units: p.quantity_units,
+          quantity_fractional: p.quantity_fractional,
+          unit_of_measure: p.unit_of_measure,
+          unit_quantity: p.unit_quantity,
+          cost_per_unit: p.cost_per_unit,
+          total_cost: p.total_cost,
+        }))
+      );
+    }
 
     // Update local state without triggering full sync
     setEditableItems(prev => prev.map(i =>
@@ -1528,6 +1546,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                                 <TableCell colSpan={7} className="p-0 border-b">
                                   <ComandaServiceProducts
                                     serviceId={item.service_id}
+                                    comandaItemId={item.id}
                                     serviceName={item.description}
                                     quantity={item.quantity}
                                     isExpanded={!!item.isProductsExpanded}

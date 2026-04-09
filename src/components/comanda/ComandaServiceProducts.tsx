@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Package, Plus, Check, Trash2, ChevronDown, ChevronUp, Search, Save } from "lucide-react";
 import { useAllServiceProducts } from "@/hooks/useServiceProducts";
 import { useProducts } from "@/hooks/useProducts";
+import { supabase } from "@/lib/dynamicSupabaseClient";
 import { cn } from "@/lib/utils";
 
 interface ProductUsage {
@@ -21,6 +22,7 @@ interface ProductUsage {
 
 interface ComandaServiceProductsProps {
   serviceId: string;
+  comandaItemId: string;
   serviceName: string;
   quantity: number;
   isExpanded: boolean;
@@ -32,6 +34,7 @@ interface ComandaServiceProductsProps {
 
 export function ComandaServiceProducts({
   serviceId,
+  comandaItemId,
   serviceName,
   quantity,
   isExpanded,
@@ -55,33 +58,62 @@ export function ComandaServiceProducts({
   const selectedNewProduct = allProducts.find(p => p.id === newProductId);
   const selectedProductIsFractional = selectedNewProduct && ["ml", "g", "dosagem", "cm"].includes(selectedNewProduct.unit_of_measure || "");
 
-  // Initialize products from service configuration (only once)
+  // Initialize products: first try loading saved data from DB, then fall back to service template
+  const [loadedFromDb, setLoadedFromDb] = useState(false);
   useEffect(() => {
     if (initialized) return;
-    
-    const serviceProducts = getProductsForService(serviceId);
-    if (serviceProducts.length > 0 || allProducts.length > 0) {
-      const initialProducts: ProductUsage[] = serviceProducts.map((sp) => {
-        const isFractional = ["ml", "g", "dosagem", "cm"].includes(sp.product?.unit_of_measure || "");
-        const fractionalAmount = sp.quantity_per_use * quantity;
-        const costPerUnit = (sp.product?.cost_price || 0) / (sp.product?.unit_quantity || 1);
-        
-        return {
+
+    const loadFromDb = async () => {
+      // Try loading saved product usage from comanda_item_products
+      const { data: savedProducts } = await supabase
+        .from("comanda_item_products")
+        .select("*")
+        .eq("comanda_item_id", comandaItemId);
+
+      if (savedProducts && savedProducts.length > 0) {
+        const loaded: ProductUsage[] = savedProducts.map((sp: any) => ({
           id: sp.id,
           product_id: sp.product_id,
-          product_name: sp.product?.name || "Produto",
-          quantity_units: 0,
-          quantity_fractional: isFractional ? fractionalAmount : sp.quantity_per_use * quantity,
-          unit_of_measure: sp.product?.unit_of_measure || "unidade",
-          unit_quantity: sp.product?.unit_quantity || 1,
-          cost_per_unit: costPerUnit,
-          total_cost: costPerUnit * fractionalAmount,
-        };
-      });
-      setProductUsages(initialProducts);
-      setInitialized(true);
-    }
-  }, [serviceId, quantity, getProductsForService, allProducts.length, initialized]);
+          product_name: sp.product_name,
+          quantity_units: Number(sp.quantity_units) || 0,
+          quantity_fractional: Number(sp.quantity_fractional) || 0,
+          unit_of_measure: sp.unit_of_measure || "unidade",
+          unit_quantity: Number(sp.unit_quantity) || 1,
+          cost_per_unit: Number(sp.cost_per_unit) || 0,
+          total_cost: Number(sp.total_cost) || 0,
+        }));
+        setProductUsages(loaded);
+        setLoadedFromDb(true);
+        setInitialized(true);
+        return;
+      }
+
+      // Fall back to service template
+      const serviceProducts = getProductsForService(serviceId);
+      if (serviceProducts.length > 0 || allProducts.length > 0) {
+        const initialProducts: ProductUsage[] = serviceProducts.map((sp) => {
+          const isFractional = ["ml", "g", "dosagem", "cm"].includes(sp.product?.unit_of_measure || "");
+          const fractionalAmount = sp.quantity_per_use * quantity;
+          const costPerUnit = (sp.product?.cost_price || 0) / (sp.product?.unit_quantity || 1);
+          return {
+            id: sp.id,
+            product_id: sp.product_id,
+            product_name: sp.product?.name || "Produto",
+            quantity_units: 0,
+            quantity_fractional: isFractional ? fractionalAmount : sp.quantity_per_use * quantity,
+            unit_of_measure: sp.product?.unit_of_measure || "unidade",
+            unit_quantity: sp.product?.unit_quantity || 1,
+            cost_per_unit: costPerUnit,
+            total_cost: costPerUnit * fractionalAmount,
+          };
+        });
+        setProductUsages(initialProducts);
+        setInitialized(true);
+      }
+    };
+
+    loadFromDb();
+  }, [serviceId, comandaItemId, quantity, getProductsForService, allProducts.length, initialized]);
 
   // Save products explicitly — only called by user action
   const saveProducts = useCallback(() => {
@@ -94,13 +126,13 @@ export function ComandaServiceProducts({
     }, 800);
   }, [serviceId, productUsages, onProductUsageChange, onToggleExpand]);
 
-  // Auto-save on initialization to ensure product_cost is always set
+  // Auto-save on initialization to ensure product_cost is always set (skip if loaded from DB — already saved)
   useEffect(() => {
-    if (initialized && productUsages.length > 0 && !isDirty) {
+    if (initialized && productUsages.length > 0 && !isDirty && !loadedFromDb) {
       onProductUsageChange(serviceId, productUsages);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialized]);
+  }, [initialized, loadedFromDb]);
 
   const updateProductUsage = (productId: string, field: 'quantity_units' | 'quantity_fractional', value: number) => {
     setProductUsages(prev => prev.map(p => {

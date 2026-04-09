@@ -1089,6 +1089,39 @@ CREATE POLICY "Users can delete client balance in their salon" ON public.client_
 CREATE INDEX idx_client_balance_salon_id ON public.client_balance(salon_id);
 CREATE INDEX idx_client_balance_client_id ON public.client_balance(client_id);
 
+-- 14. PRODUTOS CONSUMIDOS POR ITEM DA COMANDA (comanda_item_products)
+CREATE TABLE IF NOT EXISTS public.comanda_item_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  comanda_item_id UUID REFERENCES public.comanda_items(id) ON DELETE CASCADE NOT NULL,
+  product_id UUID REFERENCES public.products(id) ON DELETE SET NULL,
+  product_name TEXT NOT NULL,
+  quantity_units INTEGER NOT NULL DEFAULT 0,
+  quantity_fractional NUMERIC NOT NULL DEFAULT 0,
+  unit_of_measure TEXT NOT NULL DEFAULT 'unidade',
+  unit_quantity NUMERIC NOT NULL DEFAULT 1,
+  cost_per_unit NUMERIC NOT NULL DEFAULT 0,
+  total_cost NUMERIC NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.comanda_item_products ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY cip_select ON public.comanda_item_products FOR SELECT USING (
+  EXISTS (SELECT 1 FROM comanda_items ci JOIN comandas c ON c.id = ci.comanda_id WHERE ci.id = comanda_item_products.comanda_item_id AND c.salon_id = get_user_salon_id(auth.uid()))
+);
+CREATE POLICY cip_insert ON public.comanda_item_products FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM comanda_items ci JOIN comandas c ON c.id = ci.comanda_id WHERE ci.id = comanda_item_products.comanda_item_id AND c.salon_id = get_user_salon_id(auth.uid()))
+);
+CREATE POLICY cip_update ON public.comanda_item_products FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM comanda_items ci JOIN comandas c ON c.id = ci.comanda_id WHERE ci.id = comanda_item_products.comanda_item_id AND c.salon_id = get_user_salon_id(auth.uid()))
+);
+CREATE POLICY cip_delete ON public.comanda_item_products FOR DELETE USING (
+  EXISTS (SELECT 1 FROM comanda_items ci JOIN comandas c ON c.id = ci.comanda_id WHERE ci.id = comanda_item_products.comanda_item_id AND c.salon_id = get_user_salon_id(auth.uid()))
+);
+
+CREATE INDEX idx_cip_comanda_item_id ON public.comanda_item_products(comanda_item_id);
+CREATE INDEX idx_cip_product_id ON public.comanda_item_products(product_id);
+
 -- ============================================================
 -- Schema criado com sucesso! Agora volte ao instalador.
 -- ============================================================
