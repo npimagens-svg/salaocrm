@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Package, Plus, Check, Trash2, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { Package, Plus, Check, Trash2, ChevronDown, ChevronUp, Search, Save } from "lucide-react";
 import { useAllServiceProducts } from "@/hooks/useServiceProducts";
 import { useProducts } from "@/hooks/useProducts";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,8 @@ export function ComandaServiceProducts({
   const { getProductsForService } = useAllServiceProducts();
   const { products: allProducts } = useProducts();
   const [productUsages, setProductUsages] = useState<ProductUsage[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [newProductId, setNewProductId] = useState<string>("");
   const [newProductQty, setNewProductQty] = useState<number>(0);
@@ -79,17 +81,21 @@ export function ComandaServiceProducts({
     }
   }, [serviceId, quantity, getProductsForService, allProducts.length, initialized]);
 
-  // Stable callback to notify parent of changes
-  const notifyParent = useCallback((products: ProductUsage[]) => {
-    onProductUsageChange(serviceId, products);
-  }, [serviceId, onProductUsageChange]);
+  // Save products explicitly — only called by user action
+  const saveProducts = useCallback(() => {
+    onProductUsageChange(serviceId, productUsages);
+    setIsDirty(false);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
+  }, [serviceId, productUsages, onProductUsageChange]);
 
-  // Notify parent of changes
+  // Auto-save on initialization to ensure product_cost is always set
   useEffect(() => {
-    if (initialized) {
-      notifyParent(productUsages);
+    if (initialized && productUsages.length > 0 && !isDirty) {
+      onProductUsageChange(serviceId, productUsages);
     }
-  }, [productUsages, initialized, notifyParent]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized]);
 
   const updateProductUsage = (productId: string, field: 'quantity_units' | 'quantity_fractional', value: number) => {
     setProductUsages(prev => prev.map(p => {
@@ -108,10 +114,14 @@ export function ComandaServiceProducts({
       }
       return updated;
     }));
+    setIsDirty(true);
+    setIsSaved(false);
   };
 
   const removeProduct = (productId: string) => {
     setProductUsages(prev => prev.filter(p => p.product_id !== productId));
+    setIsDirty(true);
+    setIsSaved(false);
   };
 
   const handleAddProduct = () => {
@@ -142,6 +152,8 @@ export function ComandaServiceProducts({
     setNewProductId("");
     setNewProductQty(1);
     setIsAddingProduct(false);
+    setIsDirty(true);
+    setIsSaved(false);
   };
 
   const formatCurrency = (value: number) => {
@@ -264,9 +276,10 @@ export function ComandaServiceProducts({
                   size="icon"
                   className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-100"
                   disabled={disabled}
-                  title="Confirmar"
+                  onClick={saveProducts}
+                  title="Salvar produtos"
                 >
-                  <Check className="h-4 w-4" />
+                  <Save className="h-4 w-4" />
                 </Button>
                 
                 <Button
@@ -282,6 +295,31 @@ export function ComandaServiceProducts({
                 </Button>
               </div>
             ))
+          )}
+
+          {/* Save button + feedback */}
+          {productUsages.length > 0 && !disabled && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className={cn(
+                  "gap-2",
+                  isSaved && "bg-green-600 hover:bg-green-700",
+                  isDirty && "animate-pulse"
+                )}
+                onClick={saveProducts}
+              >
+                <Save className="h-4 w-4" />
+                {isSaved ? "Salvo!" : isDirty ? "Salvar Produtos" : "Salvar Produtos"}
+              </Button>
+              {isDirty && (
+                <span className="text-xs text-amber-600 font-medium">Alterações não salvas</span>
+              )}
+              {isSaved && (
+                <span className="text-xs text-green-600 font-medium">Custo atualizado na comanda</span>
+              )}
+            </div>
           )}
 
           {/* Add new product row */}
