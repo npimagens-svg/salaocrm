@@ -100,10 +100,8 @@ export default function Comissoes() {
 
   // Filter closed comandas within date range - using created_at for proper date attribution
   const filteredComandas = useMemo(() => {
-    const start = new Date(dateStart);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(dateEnd);
-    end.setHours(23, 59, 59, 999);
+    const start = new Date(dateStart + "T00:00:00");
+    const end = new Date(dateEnd + "T23:59:59.999");
 
     return comandas.filter(comanda => {
       // Only include closed comandas
