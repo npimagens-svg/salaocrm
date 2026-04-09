@@ -67,8 +67,8 @@ export function ProductModal({ open, onOpenChange, product, onSubmit, isLoading,
     is_for_consumption: true,
   });
 
-  const isFractional = ["ml", "g", "dosagem"].includes(formData.unit_of_measure || "");
-  const unitLabel = formData.unit_of_measure === "ml" ? "ml" : formData.unit_of_measure === "g" ? "g" : formData.unit_of_measure === "dosagem" ? "dose" : "un";
+  const isFractional = ["ml", "g", "dosagem", "cm"].includes(formData.unit_of_measure || "");
+  const unitLabel = formData.unit_of_measure === "ml" ? "ml" : formData.unit_of_measure === "g" ? "g" : formData.unit_of_measure === "dosagem" ? "dose" : formData.unit_of_measure === "cm" ? "cm" : "un";
 
   useEffect(() => {
     if (product) {

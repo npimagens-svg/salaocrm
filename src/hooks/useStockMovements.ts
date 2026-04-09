@@ -46,7 +46,7 @@ export function useStockMovements() {
 
       const product = sp.product;
       const totalQuantityUsed = Number(sp.quantity_per_use) * serviceItem.quantity;
-      const isFractional = product.unit_of_measure === 'ml' || product.unit_of_measure === 'g';
+      const isFractional = ['ml', 'g', 'dosagem', 'cm'].includes(product.unit_of_measure || '');
 
       if (isFractional) {
         // Fractional stock deduction (ml/g)

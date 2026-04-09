@@ -49,7 +49,7 @@ export function ComandaServiceProducts({
 
   // Get selected product info for the add form
   const selectedNewProduct = allProducts.find(p => p.id === newProductId);
-  const selectedProductIsFractional = selectedNewProduct && ["ml", "g", "dosagem"].includes(selectedNewProduct.unit_of_measure || "");
+  const selectedProductIsFractional = selectedNewProduct && ["ml", "g", "dosagem", "cm"].includes(selectedNewProduct.unit_of_measure || "");
 
   // Initialize products from service configuration (only once)
   useEffect(() => {
@@ -58,7 +58,7 @@ export function ComandaServiceProducts({
     const serviceProducts = getProductsForService(serviceId);
     if (serviceProducts.length > 0 || allProducts.length > 0) {
       const initialProducts: ProductUsage[] = serviceProducts.map((sp) => {
-        const isFractional = ["ml", "g", "dosagem"].includes(sp.product?.unit_of_measure || "");
+        const isFractional = ["ml", "g", "dosagem", "cm"].includes(sp.product?.unit_of_measure || "");
         const fractionalAmount = sp.quantity_per_use * quantity;
         const costPerUnit = (sp.product?.cost_price || 0) / (sp.product?.unit_quantity || 1);
         
@@ -96,7 +96,7 @@ export function ComandaServiceProducts({
       if (p.product_id !== productId) return p;
       const updated = { ...p, [field]: value };
       // Recalculate total based on fractional usage
-      const isFrac = ["ml", "g", "dosagem"].includes(p.unit_of_measure);
+      const isFrac = ["ml", "g", "dosagem", "cm"].includes(p.unit_of_measure);
       if (isFrac) {
         // Total cost = full units cost + fractional cost
         const fullUnitsCost = updated.quantity_units * (p.cost_per_unit * p.unit_quantity);
@@ -161,7 +161,7 @@ export function ComandaServiceProducts({
     return labels[unit] || unit;
   };
 
-  const isFractionalUnit = (unit: string) => ["ml", "g", "dosagem"].includes(unit);
+  const isFractionalUnit = (unit: string) => ["ml", "g", "dosagem", "cm"].includes(unit);
 
   // Filter available products (not already in list) - show ONLY internal use products (is_for_consumption)
   const availableProducts = allProducts.filter(p => 

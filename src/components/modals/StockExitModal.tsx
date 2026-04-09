@@ -52,8 +52,8 @@ export function StockExitModal({ open, onOpenChange, products }: StockExitModalP
   const [isLoading, setIsLoading] = useState(false);
 
   const selectedProduct = products.find(p => p.id === selectedProductId);
-  const isFractional = selectedProduct?.unit_of_measure === "ml" || selectedProduct?.unit_of_measure === "g";
-  const unitLabel = selectedProduct?.unit_of_measure === "ml" ? "ml" : selectedProduct?.unit_of_measure === "g" ? "g" : "unidade(s)";
+  const isFractional = ["ml", "g", "dosagem", "cm"].includes(selectedProduct?.unit_of_measure || "");
+  const unitLabel = selectedProduct?.unit_of_measure === "ml" ? "ml" : selectedProduct?.unit_of_measure === "g" ? "g" : selectedProduct?.unit_of_measure === "dosagem" ? "dose" : selectedProduct?.unit_of_measure === "cm" ? "cm" : "unidade(s)";
 
   useEffect(() => {
     if (open) {

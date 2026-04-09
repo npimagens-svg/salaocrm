@@ -166,7 +166,7 @@ export default function Comissoes() {
         }
 
         const serviceValue = item.total_price || 0;
-        const productCost = item.product_cost || 0;
+        const productCost = commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0;
 
         // Calculate proportional card fee for this item
         const cardFee = calculateItemCardFee(comanda, serviceValue);
@@ -176,9 +176,16 @@ export default function Comissoes() {
           ? serviceValue * (commissionSettings.admin_fee_percent / 100)
           : 0;
 
-        // Net value = service value - product cost - card fee - admin fee
-        const netValue = serviceValue - productCost - cardFee - adminFee;
-        const commissionValue = (netValue * commissionPercent) / 100;
+        // Net value and commission depend on product_cost_deduction setting
+        let netValue: number;
+        let commissionValue: number;
+        if (commissionSettings.product_cost_deduction === "after_commission") {
+          netValue = serviceValue - cardFee - adminFee;
+          commissionValue = (netValue * commissionPercent) / 100 - productCost;
+        } else {
+          netValue = serviceValue - productCost - cardFee - adminFee;
+          commissionValue = (netValue * commissionPercent) / 100;
+        }
 
         // Use created_at for the date display to show when service was performed
         const displayDate = format(new Date(comanda.created_at), "dd/MM/yyyy");
@@ -285,7 +292,7 @@ export default function Comissoes() {
         }
 
         const itemTotal = item.total_price || 0;
-        const productCost = item.product_cost || 0;
+        const productCost = commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0;
 
         // Calculate proportional card fee for this item
         const cardFee = calculateItemCardFee(comanda, itemTotal);
@@ -295,9 +302,16 @@ export default function Comissoes() {
           ? itemTotal * (commissionSettings.admin_fee_percent / 100)
           : 0;
 
-        // Net value = item total - product cost - card fee - admin fee
-        const netValue = itemTotal - productCost - cardFee - adminFee;
-        const commission = (netValue * commissionPercent) / 100;
+        // Net value and commission depend on product_cost_deduction setting
+        let netValue: number;
+        let commission: number;
+        if (commissionSettings.product_cost_deduction === "after_commission") {
+          netValue = itemTotal - cardFee - adminFee;
+          commission = (netValue * commissionPercent) / 100 - productCost;
+        } else {
+          netValue = itemTotal - productCost - cardFee - adminFee;
+          commission = (netValue * commissionPercent) / 100;
+        }
 
         profData.totalServices += itemTotal;
         profData.productCost += productCost;

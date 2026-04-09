@@ -6,6 +6,7 @@ import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useServices } from "@/hooks/useServices";
+import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useMemo } from "react";
 
 function formatCurrency(value: number) {
@@ -21,6 +22,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
   const { salonId } = useAuth();
   const navigate = useNavigate();
   const { services } = useServices();
+  const { commissionSettings } = useCommissionSettings();
 
   const serviceMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -84,7 +86,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
 
       items.forEach(item => {
         const itemTotal = item.total_price || 0;
-        const productCost = item.product_cost || 0;
+        const productCost = commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0;
 
         // Card fee proportional
         const comanda = comandaMap.get(item.comanda_id);
@@ -98,7 +100,6 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
           }
         }
 
-        const netValue = itemTotal - productCost - cardFee;
         // Priority: professional_service_commissions > services.commission_percent > professionals.commission_percent
         let itemCommissionPercent = commissionPercent;
         if (item.service_id && serviceMap.has(item.service_id)) {
@@ -107,7 +108,15 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
         if (item.service_id && profCommMap.has(item.service_id)) {
           itemCommissionPercent = profCommMap.get(item.service_id)!;
         }
-        const commission = (netValue * itemCommissionPercent) / 100;
+
+        let commission: number;
+        if (commissionSettings.product_cost_deduction === "after_commission") {
+          const netValue = itemTotal - cardFee;
+          commission = (netValue * itemCommissionPercent) / 100 - productCost;
+        } else {
+          const netValue = itemTotal - productCost - cardFee;
+          commission = (netValue * itemCommissionPercent) / 100;
+        }
 
         totalServices += itemTotal;
         totalCommission += commission;
