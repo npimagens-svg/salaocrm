@@ -37,6 +37,7 @@ interface CommissionItem {
   commissionValue: number;
   serviceId: string | null;
   quantity: number;
+  paymentMethod: string;
 }
 
 export default function Comissoes() {
@@ -47,6 +48,7 @@ export default function Comissoes() {
   const [dateEnd, setDateEnd] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [selectedProfessional, setSelectedProfessional] = useState<string>("all");
   const [commissionStatus, setCommissionStatus] = useState<string>("all");
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const { professionalId: currentProfessionalId, isProfessionalUser, isLoading: loadingCurrentProfessional } = useCurrentProfessional();
   const { professionals, isLoading: loadingProfessionals } = useProfessionals();
@@ -180,15 +182,26 @@ export default function Comissoes() {
         let netValue: number;
         let commissionValue: number;
         if (commissionSettings.product_cost_deduction === "after_commission") {
+          // Deduct product cost AFTER commission: commission on (service - fees), then subtract product cost
           netValue = serviceValue - cardFee - adminFee;
           commissionValue = (netValue * commissionPercent) / 100 - productCost;
         } else {
+          // Default: deduct product cost BEFORE commission
           netValue = serviceValue - productCost - cardFee - adminFee;
           commissionValue = (netValue * commissionPercent) / 100;
         }
 
         // Use created_at for the date display to show when service was performed
         const displayDate = format(new Date(comanda.created_at), "dd/MM/yyyy");
+
+        // Get primary payment method for this comanda
+        const payments = comanda.payments || [];
+        const primaryPayment = payments.length > 0 ? payments.reduce((a, b) => (a.amount > b.amount ? a : b)) : null;
+        const PAYMENT_LABELS: Record<string, string> = {
+          cash: "Dinheiro", credit_card: "Cartão Crédito", debit_card: "Cartão Débito",
+          pix: "PIX", transfer: "Transferência", voucher: "Voucher", other: "Outro",
+        };
+        const paymentMethod = primaryPayment ? (PAYMENT_LABELS[primaryPayment.payment_method] || primaryPayment.payment_method) : "-";
 
         items.push({
           comandaId: comanda.id,
@@ -204,6 +217,7 @@ export default function Comissoes() {
           commissionValue,
           serviceId: item.service_id,
           quantity: item.quantity || 1,
+          paymentMethod,
         });
       });
     });
@@ -237,6 +251,41 @@ export default function Comissoes() {
       totalPagar: totalCommission,
     };
   }, [commissionDetails]);
+
+  // Group commission details by date for mobile view
+  const dailyCommissions = useMemo(() => {
+    const grouped = new Map<string, { items: CommissionItem[]; totalProduction: number; totalCommission: number }>();
+    commissionDetails.forEach(item => {
+      const existing = grouped.get(item.date);
+      if (existing) {
+        existing.items.push(item);
+        existing.totalProduction += item.serviceValue;
+        existing.totalCommission += item.commissionValue;
+      } else {
+        grouped.set(item.date, {
+          items: [item],
+          totalProduction: item.serviceValue,
+          totalCommission: item.commissionValue,
+        });
+      }
+    });
+    return Array.from(grouped.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => {
+        const [da, ma] = a.date.split("/").map(Number);
+        const [db, mb] = b.date.split("/").map(Number);
+        return mb - ma || db - da;
+      });
+  }, [commissionDetails]);
+
+  const toggleDay = (date: string) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
 
   // Calculate commissions per professional (for "all" view)
   const professionalCommissions = useMemo(() => {
@@ -362,12 +411,14 @@ export default function Comissoes() {
     const profName = selectedProfessionalData.name;
     const periodo = `${dateStart.split("-").reverse().join("/")} a ${dateEnd.split("-").reverse().join("/")}`;
 
+    // Header
     doc.setFontSize(16);
     doc.text("Relatório de Comissão", 14, 15);
     doc.setFontSize(11);
     doc.text(`Profissional: ${profName}`, 14, 23);
     doc.text(`Período: ${periodo}`, 14, 29);
 
+    // Table
     autoTable(doc, {
       startY: 35,
       head: [["Comanda", "Data", "Serviço", "Cliente", "Valor", "Custo Prod.", "Taxa Cartão", "Líquido", "%", "Comissão"]],
@@ -394,6 +445,7 @@ export default function Comissoes() {
       },
     });
 
+    // Summary
     const finalY = (doc as any).lastAutoTable?.finalY || 150;
     const summaryY = finalY + 10;
     doc.setFontSize(11);
@@ -413,6 +465,7 @@ export default function Comissoes() {
       doc.text(value, 100, summaryY + 7 + i * 5, { align: "right" });
     });
 
+    // Total
     const totalY = summaryY + 7 + lines.length * 5 + 3;
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
@@ -425,6 +478,7 @@ export default function Comissoes() {
   const handlePrint = () => {
     const doc = generateCommissionPDF();
     if (!doc) return;
+    // Open in new window for printing
     const blob = doc.output("blob");
     const url = URL.createObjectURL(blob);
     const win = window.open(url, "_blank");
@@ -563,57 +617,119 @@ export default function Comissoes() {
                 </div>
               </div>
 
-              {/* Detailed Services Table */}
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Comanda</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Serviços e Produtos</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead className="text-right">Custo Prod.</TableHead>
-                        <TableHead className="text-right">Taxa Cartão</TableHead>
-                        <TableHead className="text-right">Líquido</TableHead>
-                        <TableHead className="text-right">Comissão</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {commissionDetails.map((item, idx) => (
-                        <TableRow key={`${item.comandaId}-${idx}`}>
-                          <TableCell className="font-mono text-sm">{item.comandaNumber}</TableCell>
-                          <TableCell>{item.date}</TableCell>
-                          <TableCell>{item.serviceName}</TableCell>
-                          <TableCell>{item.clientName}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.serviceValue)}</TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {item.productCost > 0 ? `-${formatCurrency(item.productCost)}` : "-"}
-                          </TableCell>
-                          <TableCell className="text-right text-destructive">
-                            {item.cardFee > 0 ? `-${formatCurrency(item.cardFee)}` : "-"}
-                          </TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.netValue)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Badge variant="secondary">{item.commissionPercent}%</Badge>
-                              <span className="font-medium text-primary">{formatCurrency(item.commissionValue)}</span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {commissionDetails.length === 0 && (
+              {/* Desktop: Detailed Services Table */}
+              <div className="hidden md:block">
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                            Nenhum serviço encontrado no período
-                          </TableCell>
+                          <TableHead>Comanda</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Serviços e Produtos</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                          <TableHead className="text-right">Custo Prod.</TableHead>
+                          <TableHead className="text-right">Taxa Cartão</TableHead>
+                          <TableHead className="text-right">Líquido</TableHead>
+                          <TableHead className="text-right">Comissão</TableHead>
                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {commissionDetails.map((item, idx) => (
+                          <TableRow key={`${item.comandaId}-${idx}`}>
+                            <TableCell className="font-mono text-sm">{item.comandaNumber}</TableCell>
+                            <TableCell>{item.date}</TableCell>
+                            <TableCell>{item.serviceName}</TableCell>
+                            <TableCell>{item.clientName}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.serviceValue)}</TableCell>
+                            <TableCell className="text-right text-destructive">
+                              {item.productCost > 0 ? `-${formatCurrency(item.productCost)}` : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-destructive">
+                              {item.cardFee > 0 ? `-${formatCurrency(item.cardFee)}` : "-"}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.netValue)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Badge variant="secondary">{item.commissionPercent}%</Badge>
+                                <span className="font-medium text-primary">{formatCurrency(item.commissionValue)}</span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {commissionDetails.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                              Nenhum serviço encontrado no período
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Mobile: Daily cards with expandable details */}
+              <div className="md:hidden space-y-3">
+                {dailyCommissions.length === 0 ? (
+                  <Card>
+                    <CardContent className="py-8 text-center text-muted-foreground text-sm">
+                      Nenhum serviço encontrado no período
+                    </CardContent>
+                  </Card>
+                ) : (
+                  dailyCommissions.map(day => (
+                    <Card key={day.date}>
+                      <CardContent className="p-0">
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-4 p-4"
+                          onClick={() => toggleDay(day.date)}
+                        >
+                          <span className="text-primary font-semibold text-lg">{day.date.slice(0, 5)}</span>
+                          <div className="border-l-2 border-primary/40 pl-4">
+                            <p className="text-xs text-muted-foreground font-medium uppercase">produção</p>
+                            <p className="font-semibold">{formatCurrency(day.totalProduction)}</p>
+                          </div>
+                          <div className="border-l-2 border-primary/40 pl-4">
+                            <p className="text-xs text-muted-foreground font-medium uppercase">rateio</p>
+                            <p className="font-semibold">{formatCurrency(day.totalCommission)}</p>
+                          </div>
+                          <div className="ml-auto">
+                            {expandedDays.has(day.date) ? (
+                              <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                            )}
+                          </div>
+                        </button>
+
+                        {expandedDays.has(day.date) && (
+                          <div className="px-4 pb-4 space-y-3">
+                            {day.items.map((item, idx) => (
+                              <div key={`${item.comandaId}-${idx}`} className="border rounded-lg p-3 bg-muted/30 text-sm space-y-1">
+                                <p className="font-semibold text-primary">{item.comandaNumber.split(" (")[0]} {item.date}</p>
+                                <p><span className="font-medium">Item:</span> {item.serviceName}</p>
+                                <p><span className="font-medium">Cliente:</span> {item.clientName}</p>
+                                <p><span className="font-medium">Valor:</span> {formatCurrency(item.serviceValue)}</p>
+                                <p><span className="font-medium">Tipo de Pagamento:</span> {item.paymentMethod}</p>
+                                {item.productCost > 0 && (
+                                  <p className="text-destructive"><span className="font-medium">Custo de Produto:</span> -{formatCurrency(item.productCost)}</p>
+                                )}
+                                <p className="text-primary font-medium">
+                                  Comissão: {formatCurrency(item.commissionValue)} ({item.commissionPercent}%)
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Summary Card */}
