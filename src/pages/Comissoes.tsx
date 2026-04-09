@@ -20,6 +20,8 @@ import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, startOfMonth, isWithinInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface CommissionItem {
   comandaId: string;
@@ -354,6 +356,93 @@ export default function Comissoes() {
 
   const isLoading = loadingProfessionals || loadingComandas || loadingServices || loadingClients || (isProfessionalUser && loadingCurrentProfessional);
 
+  const generateCommissionPDF = () => {
+    if (!selectedProfessionalData) return;
+    const doc = new jsPDF({ orientation: "landscape" });
+    const profName = selectedProfessionalData.name;
+    const periodo = `${dateStart.split("-").reverse().join("/")} a ${dateEnd.split("-").reverse().join("/")}`;
+
+    doc.setFontSize(16);
+    doc.text("Relatório de Comissão", 14, 15);
+    doc.setFontSize(11);
+    doc.text(`Profissional: ${profName}`, 14, 23);
+    doc.text(`Período: ${periodo}`, 14, 29);
+
+    autoTable(doc, {
+      startY: 35,
+      head: [["Comanda", "Data", "Serviço", "Cliente", "Valor", "Custo Prod.", "Taxa Cartão", "Líquido", "%", "Comissão"]],
+      body: commissionDetails.map(item => [
+        item.comandaNumber,
+        item.date,
+        item.serviceName,
+        item.clientName,
+        formatCurrency(item.serviceValue),
+        item.productCost > 0 ? `-${formatCurrency(item.productCost)}` : "-",
+        item.cardFee > 0 ? `-${formatCurrency(item.cardFee)}` : "-",
+        formatCurrency(item.netValue),
+        `${item.commissionPercent}%`,
+        formatCurrency(item.commissionValue),
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [234, 88, 12] },
+      columnStyles: {
+        4: { halign: "right" },
+        5: { halign: "right" },
+        6: { halign: "right" },
+        7: { halign: "right" },
+        9: { halign: "right" },
+      },
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 150;
+    const summaryY = finalY + 10;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Resumo", 14, summaryY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    const lines = [
+      [`Base de Rateio (Serviços):`, formatCurrency(professionalTotals.baseRateio)],
+      ...(professionalTotals.productCost > 0 ? [[`(-) Custo de Produtos:`, `-${formatCurrency(professionalTotals.productCost)}`]] : []),
+      ...(professionalTotals.cardFee > 0 ? [[`(-) Taxa de Cartão:`, `-${formatCurrency(professionalTotals.cardFee)}`]] : []),
+      [`Valor Líquido:`, formatCurrency(professionalTotals.netValue)],
+      [`Comissão:`, formatCurrency(professionalTotals.totalRateio)],
+    ];
+    lines.forEach(([label, value], i) => {
+      doc.text(label, 14, summaryY + 7 + i * 5);
+      doc.text(value, 100, summaryY + 7 + i * 5, { align: "right" });
+    });
+
+    const totalY = summaryY + 7 + lines.length * 5 + 3;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Total a pagar:", 14, totalY);
+    doc.text(formatCurrency(professionalTotals.totalPagar), 100, totalY, { align: "right" });
+
+    return doc;
+  };
+
+  const handlePrint = () => {
+    const doc = generateCommissionPDF();
+    if (!doc) return;
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) {
+      win.addEventListener("load", () => {
+        win.print();
+      });
+    }
+  };
+
+  const handlePDF = () => {
+    const doc = generateCommissionPDF();
+    if (!doc) return;
+    const profName = selectedProfessionalData?.name?.replace(/\s+/g, "_") || "profissional";
+    const periodo = `${dateStart}_${dateEnd}`;
+    doc.save(`Comissao_${profName}_${periodo}.pdf`);
+  };
+
   if (isLoading) {
     return (
       <AppLayoutNew>
@@ -463,11 +552,11 @@ export default function Comissoes() {
                   Relatório de comissão
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handlePrint}>
                     <Printer className="h-4 w-4 mr-2" />
                     Imprimir
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handlePDF}>
                     <FileText className="h-4 w-4 mr-2" />
                     PDF
                   </Button>
