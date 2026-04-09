@@ -133,7 +133,7 @@ export function ProductModal({ open, onOpenChange, product, onSubmit, isLoading,
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="sm:max-w-2xl max-h-[95vh] flex flex-col p-0">
         <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
           <DialogTitle>{isEditing ? "Editar Produto" : "Novo Produto"}</DialogTitle>
         </DialogHeader>
