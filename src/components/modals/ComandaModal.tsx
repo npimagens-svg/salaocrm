@@ -1412,6 +1412,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                                       <Package className="h-4 w-4" />
                                     </Button>
                                   )}
+                                  {item.product_cost > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Custo prod.: {formatCurrency(item.product_cost)}
+                                    </span>
+                                  )}
                                 </div>
                               </TableCell>
                               <TableCell>

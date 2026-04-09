@@ -120,7 +120,7 @@ export function ComandaServiceProducts({
     const product = allProducts.find(p => p.id === newProductId);
     if (!product) return;
 
-    const isFrac = ["ml", "g", "dosagem"].includes(product.unit_of_measure || "");
+    const isFrac = ["ml", "g", "dosagem", "cm"].includes(product.unit_of_measure || "");
     const costPerUnit = (product.cost_price || 0) / (product.unit_quantity || 1);
     
     const newUsage: ProductUsage = {

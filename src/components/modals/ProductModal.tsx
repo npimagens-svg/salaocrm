@@ -305,7 +305,7 @@ export function ProductModal({ open, onOpenChange, product, onSubmit, isLoading,
                 {/* Content per unit - Only shows when ml or g is selected */}
                 {isFractional && (
                   <div className="space-y-2">
-                    <Label htmlFor="unit_quantity">Conteúdo do frasco ({unitLabel})</Label>
+                    <Label htmlFor="unit_quantity">Conteúdo do produto ({unitLabel})</Label>
                     <Input
                       id="unit_quantity"
                       type="number"
