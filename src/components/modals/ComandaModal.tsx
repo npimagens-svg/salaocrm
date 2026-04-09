@@ -911,11 +911,10 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             .eq("id", comanda.id);
           if (error) throw error;
 
-          // Delete payments so they can be re-created on next close
-          await supabase.from("payments").delete().eq("comanda_id", comanda.id);
-
           queryClient.invalidateQueries({ queryKey: ["comandas"] });
-          toast({ title: "Comanda reaberta com sucesso!", description: "O caixa original já estava fechado. Ao finalizar, vincule a um caixa aberto." });
+          // Reload payments so they appear in the reopened comanda
+          loadPayments();
+          toast({ title: "Comanda reaberta com sucesso!", description: "O caixa original já estava fechado. Pagamentos mantidos. Ao finalizar, vincule a um caixa aberto." });
         }
       } else {
         // No caixa linked — just reopen
@@ -1535,6 +1534,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                                     onToggleExpand={() => toggleProductsExpanded(item.id)}
                                     onProductUsageChange={handleProductUsageChange}
                                     disabled={!!isComandaLocked}
+                                    savedProductCost={item.product_cost || 0}
                                   />
                                 </TableCell>
                               </TableRow>

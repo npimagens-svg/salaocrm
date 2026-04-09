@@ -27,6 +27,7 @@ interface ComandaServiceProductsProps {
   onToggleExpand: () => void;
   onProductUsageChange: (serviceId: string, products: ProductUsage[]) => void;
   disabled?: boolean;
+  savedProductCost?: number;
 }
 
 export function ComandaServiceProducts({
@@ -37,6 +38,7 @@ export function ComandaServiceProducts({
   onToggleExpand,
   onProductUsageChange,
   disabled = false,
+  savedProductCost = 0,
 }: ComandaServiceProductsProps) {
   const { getProductsForService } = useAllServiceProducts();
   const { products: allProducts } = useProducts();
@@ -210,7 +212,23 @@ export function ComandaServiceProducts({
       {/* Product list - only when expanded */}
       {isExpanded && (
         <div className="mt-3 space-y-2">
-          {productUsages.length === 0 ? (
+          {/* Show saved cost info when products don't match */}
+          {savedProductCost > 0 && productUsages.length === 0 && (
+            <div className="p-2 rounded-md bg-amber-50 border border-amber-200 text-sm">
+              <span className="font-medium text-amber-800">Custo registrado: {formatCurrency(savedProductCost)}</span>
+              <p className="text-xs text-amber-600 mt-1">
+                Produtos foram lançados anteriormente mas o serviço não possui produtos configurados. Adicione os produtos manualmente abaixo.
+              </p>
+            </div>
+          )}
+          {savedProductCost > 0 && productUsages.length > 0 && Math.abs(totalProductCost - savedProductCost) > 0.01 && (
+            <div className="p-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-700">
+              Custo registrado na comanda: {formatCurrency(savedProductCost)} • Custo calculado: {formatCurrency(totalProductCost)}
+              {!disabled && " — Clique em Salvar para atualizar"}
+            </div>
+          )}
+
+          {productUsages.length === 0 && savedProductCost === 0 ? (
             <p className="text-sm text-muted-foreground italic py-2">
               Nenhum produto vinculado a este serviço. Clique em "Adicionar Produto" para incluir.
             </p>
