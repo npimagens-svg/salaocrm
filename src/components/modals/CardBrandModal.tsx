@@ -87,7 +87,7 @@ export function CardBrandModal({ open, onClose, onSave, cardBrand, isLoading }: 
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-lg max-h-[95vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {cardBrand ? "Editar Maquininha / Bandeira" : "Nova Maquininha / Bandeira"}

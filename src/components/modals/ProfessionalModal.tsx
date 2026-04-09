@@ -171,7 +171,7 @@ export function ProfessionalModal({ open, onOpenChange, professional, onSubmit, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-primary text-xl">
             {professional ? "Editar Profissional" : "Novo Profissional"}
