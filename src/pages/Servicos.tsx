@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Clock, DollarSign, MoreHorizontal, Loader2, Upload } from "lucide-react";
+import { Plus, Clock, DollarSign, MoreHorizontal, Loader2, Upload, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useServices, Service, ServiceInput } from "@/hooks/useServices";
 import { ServiceModal } from "@/components/modals/ServiceModal";
 import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal";
@@ -19,6 +20,7 @@ export default function Servicos() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { services, isLoading, createService, updateService, deleteService, isCreating, isUpdating, isDeleting } = useServices();
   const { isMaster, salonId } = useAuth();
@@ -94,34 +96,72 @@ export default function Servicos() {
             </div>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {services.map((service) => (
-              <Card key={service.id} className={`hover:shadow-md transition-shadow ${!service.is_active ? "opacity-60" : ""}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-base">{service.name}</CardTitle>
-                      {service.category && <Badge variant="outline" className="mt-1">{service.category}</Badge>}
+          <>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar serviço por nome ou categoria..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {services
+                    .filter(s => {
+                      if (!searchQuery) return true;
+                      const q = searchQuery.toLowerCase();
+                      return s.name.toLowerCase().includes(q) || (s.category || "").toLowerCase().includes(q);
+                    })
+                    .map((service) => (
+                      <div
+                        key={service.id}
+                        className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer ${!service.is_active ? "opacity-50" : ""}`}
+                        onClick={() => handleEdit(service)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate">{service.name}</span>
+                            {service.category && <Badge variant="outline" className="text-xs shrink-0">{service.category}</Badge>}
+                            {!service.is_active && <Badge variant="secondary" className="text-xs shrink-0">Inativo</Badge>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0 text-sm">
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5" />
+                            {formatDuration(service.duration_minutes)}
+                          </span>
+                          <span className="font-medium w-24 text-right">
+                            R$ {Number(service.price).toFixed(2)}
+                          </span>
+                          <span className="text-xs text-muted-foreground w-16 text-right">
+                            {Number(service.commission_percent) || 0}%
+                          </span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(service); }}>Editar</DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(service); }} className="text-destructive">Excluir</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    ))}
+                  {services.filter(s => !searchQuery || s.name.toLowerCase().includes(searchQuery.toLowerCase()) || (s.category || "").toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      Nenhum serviço encontrado para "{searchQuery}"
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEdit(service)}>Editar</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(service)} className="text-destructive">Excluir</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-1 text-muted-foreground"><Clock className="h-4 w-4" />{formatDuration(service.duration_minutes)}</div>
-                    <div className="flex items-center gap-1 font-medium"><DollarSign className="h-4 w-4" />R$ {Number(service.price).toFixed(2)}</div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">Comissão: {Number(service.commission_percent) || 0}%</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </>
         )}
       </div>
       <ServiceModal open={modalOpen} onOpenChange={setModalOpen} service={selectedService} onSubmit={handleSubmit} isLoading={isCreating || isUpdating} />
