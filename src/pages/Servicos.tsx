@@ -4,8 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Clock, DollarSign, MoreHorizontal, Loader2, Upload, Search } from "lucide-react";
+import { Plus, Clock, DollarSign, MoreHorizontal, Loader2, Upload, Search, FileText, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 import { useServices, Service, ServiceInput } from "@/hooks/useServices";
 import { ServiceModal } from "@/components/modals/ServiceModal";
 import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal";
@@ -69,6 +72,50 @@ export default function Servicos() {
 
   const formatDuration = (min: number) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}min` : ""}` : `${min}min`;
 
+  const filteredServices = services.filter(s => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return s.name.toLowerCase().includes(q) || (s.category || "").toLowerCase().includes(q);
+  });
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text("Lista de Serviços", 14, 15);
+    doc.setFontSize(9);
+    doc.text(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, 14, 22);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [["Serviço", "Categoria", "Duração", "Preço (R$)", "Comissão (%)"]],
+      body: filteredServices.map(s => [
+        s.name,
+        s.category || "-",
+        formatDuration(s.duration_minutes),
+        `R$ ${Number(s.price).toFixed(2)}`,
+        `${Number(s.commission_percent) || 0}%`,
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [234, 88, 12] },
+    });
+    doc.save("Servicos.pdf");
+  };
+
+  const handleExportXLS = () => {
+    const data = filteredServices.map(s => ({
+      "Serviço": s.name,
+      "Categoria": s.category || "",
+      "Duração (min)": s.duration_minutes,
+      "Preço (R$)": Number(s.price),
+      "Comissão (%)": Number(s.commission_percent) || 0,
+      "Ativo": s.is_active ? "Sim" : "Não",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Serviços");
+    XLSX.writeFile(wb, "Servicos.xlsx");
+  };
+
   if (isLoading) {
     return <AppLayoutNew><div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div></AppLayoutNew>;
   }
@@ -79,6 +126,14 @@ export default function Servicos() {
         <div className="flex justify-between items-center">
           <p className="text-muted-foreground">Gerencie os serviços oferecidos pelo salão</p>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportPDF}>
+              <FileText className="h-4 w-4" />
+              PDF
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleExportXLS}>
+              <FileSpreadsheet className="h-4 w-4" />
+              XLS
+            </Button>
             {isMaster && (
               <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
                 <Upload className="h-4 w-4" />
@@ -108,14 +163,15 @@ export default function Servicos() {
             </div>
             <Card>
               <CardContent className="p-0">
+                <div className="flex items-center gap-4 px-4 py-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <span className="flex-1">Serviço</span>
+                  <span className="w-16 text-center">Duração</span>
+                  <span className="w-24 text-right">Preço</span>
+                  <span className="w-16 text-right">Comissão</span>
+                  <span className="w-8"></span>
+                </div>
                 <div className="divide-y">
-                  {services
-                    .filter(s => {
-                      if (!searchQuery) return true;
-                      const q = searchQuery.toLowerCase();
-                      return s.name.toLowerCase().includes(q) || (s.category || "").toLowerCase().includes(q);
-                    })
-                    .map((service) => (
+                  {filteredServices.map((service) => (
                       <div
                         key={service.id}
                         className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer ${!service.is_active ? "opacity-50" : ""}`}
@@ -129,14 +185,14 @@ export default function Servicos() {
                           </div>
                         </div>
                         <div className="flex items-center gap-4 shrink-0 text-sm">
-                          <span className="flex items-center gap-1 text-muted-foreground">
+                          <span className="flex items-center gap-1 text-muted-foreground w-16 justify-center">
                             <Clock className="h-3.5 w-3.5" />
                             {formatDuration(service.duration_minutes)}
                           </span>
                           <span className="font-medium w-24 text-right">
                             R$ {Number(service.price).toFixed(2)}
                           </span>
-                          <span className="text-xs text-muted-foreground w-16 text-right">
+                          <span className="text-muted-foreground w-16 text-right">
                             {Number(service.commission_percent) || 0}%
                           </span>
                           <DropdownMenu>
@@ -153,7 +209,7 @@ export default function Servicos() {
                         </div>
                       </div>
                     ))}
-                  {services.filter(s => !searchQuery || s.name.toLowerCase().includes(searchQuery.toLowerCase()) || (s.category || "").toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                  {filteredServices.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground text-sm">
                       Nenhum serviço encontrado para "{searchQuery}"
                     </div>

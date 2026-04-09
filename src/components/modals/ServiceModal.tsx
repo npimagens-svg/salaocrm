@@ -17,7 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Service, ServiceInput } from "@/hooks/useServices";
 import { useProducts, Product } from "@/hooks/useProducts";
 import { useServiceProducts, ServiceProduct } from "@/hooks/useServiceProducts";
-import { Plus, Trash2, Package, Loader2 } from "lucide-react";
+import { Plus, Trash2, Package, Loader2, Search } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface ServiceModalProps {
   open: boolean;
@@ -42,6 +44,8 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
   });
   const [activeTab, setActiveTab] = useState("info");
   const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productPopoverOpen, setProductPopoverOpen] = useState(false);
   const [quantityToAdd, setQuantityToAdd] = useState<number>(1);
 
   const { products } = useProducts();
@@ -300,22 +304,56 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
               <>
                 {/* Add Product */}
                 <div className="flex gap-2">
-                  <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Selecione um produto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {unlinkedProducts.length === 0 ? (
-                        <SelectItem value="none" disabled>Nenhum produto disponível</SelectItem>
-                      ) : (
-                        unlinkedProducts.map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} ({product.unit_of_measure})
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={productPopoverOpen} onOpenChange={(open) => { setProductPopoverOpen(open); if (open) setProductSearchQuery(""); }}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="flex-1 justify-start font-normal">
+                        {selectedProductId ? (
+                          <span>{unlinkedProducts.find(p => p.id === selectedProductId)?.name || products.find(p => p.id === selectedProductId)?.name || "Produto"}</span>
+                        ) : (
+                          <span className="text-muted-foreground">Buscar produto...</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <div className="p-2">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                            <input
+                              className="w-full pl-8 pr-3 py-2 text-sm border rounded-md outline-none focus:ring-2 focus:ring-primary"
+                              placeholder="Digite para buscar..."
+                              value={productSearchQuery}
+                              onChange={(e) => setProductSearchQuery(e.target.value)}
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+                        <CommandList>
+                          {unlinkedProducts.filter(p => p.name.toLowerCase().includes(productSearchQuery.toLowerCase())).length === 0 ? (
+                            <CommandEmpty>Nenhum produto encontrado</CommandEmpty>
+                          ) : (
+                            <CommandGroup>
+                              {unlinkedProducts
+                                .filter(p => p.name.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                                .map((product) => (
+                                  <CommandItem
+                                    key={product.id}
+                                    onSelect={() => {
+                                      setSelectedProductId(product.id);
+                                      setProductPopoverOpen(false);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <span className="flex-1">{product.name}</span>
+                                    <span className="text-xs text-muted-foreground">({product.unit_of_measure})</span>
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <Input
                     type="number"
                     min={0.01}
