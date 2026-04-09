@@ -25,6 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePendingCaixaCheck } from "@/hooks/usePendingCaixaCheck";
+import { AlertTriangle } from "lucide-react";
 
 function generateTimeSlots(openingTime: string, closingTime: string, intervalMinutes: number): string[] {
   const slots: string[] = [];
@@ -74,6 +76,7 @@ export default function Agenda() {
   const { toast } = useToast();
   const { salonId } = useAuth();
   const queryClient = useQueryClient();
+  const { hasPendingCaixa, message: pendingCaixaMessage } = usePendingCaixaCheck();
   const { appointments, isLoading: appointmentsLoading, createAppointment, createMultipleAppointments, updateAppointment, isCreating, isUpdating } = useAppointments(currentDate);
   const { professionals, isLoading: professionalsLoading } = useProfessionals();
   const { clients, createClient, updateClient } = useClients();
@@ -232,6 +235,10 @@ export default function Agenda() {
   };
 
   const handleSubmit = (data: AppointmentInput & { id?: string }) => {
+    if (!data.id && hasPendingCaixa) {
+      toast({ title: "Caixa pendente", description: pendingCaixaMessage || "Finalize o caixa anterior antes de agendar.", variant: "destructive" });
+      return;
+    }
     if (data.id) {
       updateAppointment(data as AppointmentInput & { id: string });
     } else {
@@ -325,6 +332,12 @@ export default function Agenda() {
 
   return (
     <AppLayoutNew>
+      {hasPendingCaixa && (
+        <div className="flex items-center gap-3 p-3 bg-destructive/10 border-b border-destructive/30 text-destructive text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{pendingCaixaMessage} Vá em Financeiro para finalizar.</span>
+        </div>
+      )}
       <div className="flex flex-col lg:flex-row gap-0 h-full">
         {/* Left Sidebar - Calendar & Filters */}
         <div className="lg:w-56 xl:w-64 lg:shrink-0 lg:border-r border-border bg-card">

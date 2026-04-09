@@ -26,6 +26,7 @@ import { format, isSameDay, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePendingCaixaCheck } from "@/hooks/usePendingCaixaCheck";
 
 interface AppointmentData {
   id: string;
@@ -67,6 +68,7 @@ export default function Comandas() {
 
   const { user, salonId, isMaster } = useAuth();
   const queryClient = useQueryClient();
+  const { hasPendingCaixa, message: pendingCaixaMessage } = usePendingCaixaCheck();
   const { comandas, isLoading, createComanda, findOrCreateTodayComanda, isCreating } = useComandas();
   const { clients, createClient } = useClients();
   const { professionals } = useProfessionals();
@@ -289,6 +291,11 @@ export default function Comandas() {
   });
 
   const handleCreate = async () => {
+    if (hasPendingCaixa) {
+      toast({ title: "Caixa pendente", description: pendingCaixaMessage || "Finalize o caixa anterior antes de criar uma comanda.", variant: "destructive" });
+      return;
+    }
+
     // Determine target date (master can pick a date)
     const targetDate = comandaDate ? new Date(comandaDate + "T12:00:00") : new Date();
     const isToday = isSameDay(targetDate, new Date());
@@ -444,6 +451,17 @@ export default function Comandas() {
   return (
     <AppLayoutNew>
       <div className="space-y-4">
+        {/* Pending Caixa Warning */}
+        {hasPendingCaixa && (
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium">Caixa pendente de dia anterior</p>
+              <p className="text-destructive/80">{pendingCaixaMessage} Vá em Financeiro para finalizar.</p>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <Button className="gap-2" onClick={() => setModalOpen(true)} disabled={!userOpenCaixaId}>
