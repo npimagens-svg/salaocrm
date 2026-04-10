@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "*",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -19,7 +19,7 @@ interface EmailRequest {
   body?: string;
 }
 
-const WHATSAPP_NUMBER = "5511940681490";
+const WHATSAPP_NUMBER = "5511978355751";
 
 function whatsappUrl(subject: string): string {
   const msg = encodeURIComponent(`Olá! Vi o e-mail "${subject}" e gostaria de agendar um horário 💇‍♀️`);
