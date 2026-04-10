@@ -146,6 +146,12 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate required fields
+    if (!formData.name?.trim()) return;
+    if (!formData.phone?.trim()) return;
+    if (!formData.email?.trim()) return;
+
     if (client) {
       onSubmit({ ...formData, id: client.id });
     } else {
@@ -253,7 +259,7 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
                 {/* Celular e Telefone */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Celular:</Label>
+                    <Label htmlFor="phone">Celular / WhatsApp (Obrigatório):</Label>
                     <div className="flex gap-2">
                       <Input className="w-20" value="+55" disabled />
                       <Input
@@ -262,6 +268,7 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
                         value={formData.phone}
                         onChange={(e) => updateField("phone", e.target.value)}
                         className="flex-1"
+                        required
                       />
                     </div>
                   </div>
@@ -330,13 +337,14 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
                 {/* Email e CEP */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-mail:</Label>
+                    <Label htmlFor="email">E-mail (Obrigatório):</Label>
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
                       onChange={(e) => updateField("email", e.target.value.toLowerCase())}
                       className="lowercase"
+                      required
                     />
                   </div>
                   <div className="space-y-2">
