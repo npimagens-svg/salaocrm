@@ -299,6 +299,15 @@ export function useComandas() {
         .delete()
         .eq("comanda_id", comandaId);
 
+      // 4b. Limpa registros de saldo gerados no fechamento anterior
+      // (cashback, troco como credito, divida salva). Senao, ao refechar,
+      // acumula duplicado em client_debts/client_credits/client_balance.
+      await Promise.all([
+        supabase.from("client_credits").delete().eq("comanda_id", comandaId),
+        supabase.from("client_debts" as any).delete().eq("comanda_id", comandaId),
+        supabase.from("client_balance").delete().eq("comanda_id", comandaId),
+      ]);
+
       // 5. Reopen the comanda
       const { data, error } = await supabase
         .from("comandas")

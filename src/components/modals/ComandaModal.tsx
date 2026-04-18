@@ -1156,6 +1156,16 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         }
       }
 
+      // Limpa registros de saldo gerados em fechamentos anteriores desta comanda.
+      // Sem isso, reabrir+refechar duplicava entradas em client_debts/credits/balance.
+      if (comanda.client_id) {
+        await Promise.all([
+          supabase.from("client_credits").delete().eq("comanda_id", comanda.id),
+          supabase.from("client_debts" as any).delete().eq("comanda_id", comanda.id),
+          supabase.from("client_balance").delete().eq("comanda_id", comanda.id),
+        ]);
+      }
+
       // Generate loyalty credit (7% of full-price SERVICES only — no packages, no discounts)
       if (enableCashback && comanda.client_id) {
         try {
