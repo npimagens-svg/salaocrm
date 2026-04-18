@@ -1116,11 +1116,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         throw new Error(`Erro ao fechar comanda: ${closeError.message}`);
       }
 
-      // Update linked appointments to "paid" status
+      // Update linked appointments to "completed" status (azul na agenda)
       if (comanda.appointment_id) {
         await supabase
           .from("appointments")
-          .update({ status: "paid" })
+          .update({ status: "completed" })
           .eq("id", comanda.appointment_id);
       }
       // Also update appointments linked via comanda_items.source_appointment_id
@@ -1130,7 +1130,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       if (appointmentIds.length > 0) {
         await supabase
           .from("appointments")
-          .update({ status: "paid" })
+          .update({ status: "completed" })
           .in("id", appointmentIds);
       }
 
