@@ -126,6 +126,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const [serviceProductUsages, setServiceProductUsages] = useState<Record<string, ProductUsage[]>>({});
   const [saveOverpaymentAsCredit, setSaveOverpaymentAsCredit] = useState(false);
   const [saveUnderpaymentAsDebt, setSaveUnderpaymentAsDebt] = useState(false);
+  const [chargeOldDebt, setChargeOldDebt] = useState(false);
   const [enableCashback, setEnableCashback] = useState(true);
   const [packagePopoverOpen, setPackagePopoverOpen] = useState(false);
   const [availablePackages, setAvailablePackages] = useState<any[]>([]);
@@ -255,6 +256,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   // Reset override when comanda changes
   useEffect(() => {
     setComandaDateOverride(null);
+    setChargeOldDebt(false);
   }, [comanda?.id]);
 
   // Check if comanda's caixa is closed (locked state)
@@ -826,7 +828,9 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
 
   const subtotal = editableItems.reduce((acc, item) => acc + Number(item.total_price), 0);
   const totalPayments = payments.reduce((acc, p) => acc + p.amount, 0);
-  const difference = subtotal - totalPayments;
+  const oldDebtToCharge = chargeOldDebt && clientNetBalance < 0 ? Math.abs(clientNetBalance) : 0;
+  const totalToCharge = subtotal + oldDebtToCharge;
+  const difference = totalToCharge - totalPayments;
 
   const handlePrintReceipt = () => {
     if (!comanda) return;
@@ -1271,22 +1275,22 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       }
 
       // If client had existing debt and payment covers it, create credit entry to zero out
-      if (comanda.client_id && clientNetBalance < 0) {
-        const debtAmount = Math.abs(clientNetBalance);
-        // If the total payments cover services + debt, record a credit to offset the debt
-        if (totalPayments >= subtotal + debtAmount - 0.01) {
-          try {
-            await supabase.from("client_balance").insert({
-              salon_id: salonId,
-              client_id: comanda.client_id,
-              type: "credit",
-              amount: Math.round(debtAmount * 100) / 100,
-              description: `Pagamento de divida anterior via comanda ${comandaRef}`,
-              comanda_id: comanda.id,
-            });
-          } catch (balanceError) {
-            console.error("Erro ao registrar pagamento de divida:", balanceError);
-          }
+      // Quita divida anterior quando usuario marcou "Cobrar divida anterior" e o pagamento
+      // cobriu itens + divida. Marca TODAS as client_debts abertas do cliente como pagas.
+      if (chargeOldDebt && comanda.client_id && clientNetBalance < 0 && totalPayments >= totalToCharge - 0.01) {
+        try {
+          await supabase
+            .from("client_debts" as any)
+            .update({
+              is_paid: true,
+              paid_at: new Date().toISOString(),
+              paid_in_comanda_id: comanda.id,
+            })
+            .eq("salon_id", salonId)
+            .eq("client_id", comanda.client_id)
+            .eq("is_paid", false);
+        } catch (debtError) {
+          console.error("Erro ao quitar divida anterior:", debtError);
         }
       }
 
@@ -1391,6 +1395,50 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                   </Badge>
                 )}
               </div>
+
+              {/* Alerta de divida com acoes */}
+              {comanda.client_id && clientNetBalance < 0 && !isComandaLocked && (
+                <Card className="border-destructive/50 bg-destructive/10">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <p className="font-semibold text-destructive text-sm">
+                            Cliente possui divida em aberto de {formatCurrency(Math.abs(clientNetBalance))}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Valor pendente de comandas anteriores. O que deseja fazer?
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => { setChargeOldDebt(true); setActiveTab("pagamento"); }}
+                          >
+                            Cobrar nesta comanda
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setChargeOldDebt(false)}
+                          >
+                            Deixar em aberto
+                          </Button>
+                        </div>
+                        {chargeOldDebt && (
+                          <p className="text-xs text-green-700 font-medium pt-1">
+                            Divida sera adicionada ao Total a Cobrar. Ao fechar, sera quitada automaticamente.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Items Table */}
               <Card>
@@ -1791,11 +1839,23 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
               {/* Total a Cobrar — Avec large centered */}
               <div className="text-center py-2">
                 <Label className="text-xs text-muted-foreground">Total a Cobrar:</Label>
-                <p className="text-3xl font-bold text-destructive">{formatCurrency(subtotal)}</p>
+                <p className="text-3xl font-bold text-destructive">{formatCurrency(totalToCharge)}</p>
+                {oldDebtToCharge > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Itens {formatCurrency(subtotal)} + divida anterior {formatCurrency(oldDebtToCharge)}
+                  </p>
+                )}
               </div>
 
               {/* Options row: cashback, credit, debt */}
               <div className="flex flex-wrap gap-4 text-sm">
+                {comanda?.client_id && clientNetBalance < 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer text-destructive">
+                    <Checkbox id="charge-old-debt" checked={chargeOldDebt} onCheckedChange={(checked) => setChargeOldDebt(!!checked)} />
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Cobrar divida anterior ({formatCurrency(Math.abs(clientNetBalance))})
+                  </label>
+                )}
                 {comanda?.client_id && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox id="enable-cashback" checked={enableCashback} onCheckedChange={(checked) => setEnableCashback(!!checked)} />
@@ -1948,7 +2008,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                         variant="outline"
                         size="sm"
                         className="shrink-0"
-                        onClick={() => updatePayment(payment.id, 'amount', subtotal - totalPayments + payment.amount)}
+                        onClick={() => updatePayment(payment.id, 'amount', totalToCharge - totalPayments + payment.amount)}
                       >
                         Dif
                       </Button>
