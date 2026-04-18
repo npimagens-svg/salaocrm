@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 4;
+export const LATEST_SCHEMA_VERSION = 5;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -48,6 +48,23 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
     description: "Adiciona loyalty_default_enabled em commission_settings. Por padrao cashback vem desmarcado na comanda; toggle em Marketing > Fidelidade ativa por padrao.",
     statements: [
       `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS loyalty_default_enabled BOOLEAN NOT NULL DEFAULT false;`,
+    ],
+  },
+  {
+    version: 5,
+    name: "FKs em cascade + CHECKs positivos",
+    description: "Deletar comanda agora apaga credits/debts/balance ligados (antes virava orfao). CHECK garante credit_amount>0 e debt_amount>0.",
+    statements: [
+      `ALTER TABLE public.client_credits DROP CONSTRAINT IF EXISTS client_credits_comanda_id_fkey;`,
+      `ALTER TABLE public.client_credits ADD CONSTRAINT client_credits_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES public.comandas(id) ON DELETE CASCADE;`,
+      `ALTER TABLE public.client_debts DROP CONSTRAINT IF EXISTS client_debts_comanda_id_fkey;`,
+      `ALTER TABLE public.client_debts ADD CONSTRAINT client_debts_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES public.comandas(id) ON DELETE CASCADE;`,
+      `ALTER TABLE public.client_balance DROP CONSTRAINT IF EXISTS client_balance_comanda_id_fkey;`,
+      `ALTER TABLE public.client_balance ADD CONSTRAINT client_balance_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES public.comandas(id) ON DELETE CASCADE;`,
+      `ALTER TABLE public.client_credits DROP CONSTRAINT IF EXISTS client_credits_amount_positive;`,
+      `ALTER TABLE public.client_credits ADD CONSTRAINT client_credits_amount_positive CHECK (credit_amount > 0);`,
+      `ALTER TABLE public.client_debts DROP CONSTRAINT IF EXISTS client_debts_amount_positive;`,
+      `ALTER TABLE public.client_debts ADD CONSTRAINT client_debts_amount_positive CHECK (debt_amount > 0);`,
     ],
   },
 ];

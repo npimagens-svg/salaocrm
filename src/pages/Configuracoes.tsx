@@ -61,6 +61,7 @@ import { WebhookSettingsSection } from "@/components/settings/WebhookSettingsSec
 import { ApiGatewaySettingsSection } from "@/components/settings/ApiGatewaySettingsSection";
 import { ResendSettingsSection } from "@/components/settings/ResendSettingsSection";
 import { SchemaUpdateCard } from "@/components/settings/SchemaUpdateCard";
+import { SystemDiagnosticsCard } from "@/components/settings/SystemDiagnosticsCard";
 import { AuditLogSection } from "@/components/settings/AuditLogSection";
 
 const SPECIALTIES = [
@@ -1240,8 +1241,9 @@ export default function Configuracoes() {
         {subPage === "atualizacoes" && isMaster && (
           <>
             <SettingsBreadcrumb label="Atualizações do Sistema" />
-            <h1 className="text-2xl font-bold tracking-tight">Atualizações do Sistema</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Atualizações e Saúde do Sistema</h1>
             <SchemaUpdateCard />
+            <SystemDiagnosticsCard />
           </>
         )}
       </div>
