@@ -12,6 +12,7 @@ import { Search, Loader2, DollarSign, ChevronDown, ChevronUp, FileText, Printer 
 import { useProfessionals } from "@/hooks/useProfessionals";
 import { useComandas } from "@/hooks/useComandas";
 import { useServices } from "@/hooks/useServices";
+import { useProducts } from "@/hooks/useProducts";
 import { useClients } from "@/hooks/useClients";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useCurrentProfessional } from "@/hooks/useCurrentProfessional";
@@ -62,6 +63,7 @@ export default function Comissoes() {
   const { salonId } = useAuth();
   const { comandas, isLoading: loadingComandas } = useComandas();
   const { services, isLoading: loadingServices } = useServices();
+  const { products, isLoading: loadingProducts } = useProducts();
   const { clients, isLoading: loadingClients } = useClients();
   const { settings: commissionSettings } = useCommissionSettings();
 
@@ -101,6 +103,13 @@ export default function Comissoes() {
     services.forEach(s => map.set(s.id, { name: s.name, commission_percent: s.commission_percent || 0 }));
     return map;
   }, [services]);
+
+  // Create product map for quick lookup (produtos vendidos na comanda)
+  const productMap = useMemo(() => {
+    const map = new Map<string, { name: string; commission_percent: number }>();
+    products.forEach(p => map.set(p.id, { name: p.name, commission_percent: Number(p.commission_percent) || 0 }));
+    return map;
+  }, [products]);
 
   // Filter closed comandas within date range - using created_at for proper date attribution
   const filteredComandas = useMemo(() => {
@@ -147,20 +156,26 @@ export default function Comissoes() {
 
         // Get service info and commission percent
         // Priority: package_commission > professional_service_commissions > services.commission_percent > professionals.commission_percent
+        // Produtos vendidos: usa products.commission_percent (nao herda do profissional)
         let serviceName = item.description || "Serviço";
         let commissionPercent = selectedProf.commission_percent || 0;
 
         // Package items use package_commission_percent from the professional
         if (item.item_type === "package") {
           commissionPercent = selectedProf.package_commission_percent || commissionPercent;
+        } else if (item.item_type === "product" && item.product_id && productMap.has(item.product_id)) {
+          const productInfo = productMap.get(item.product_id)!;
+          serviceName = productInfo.name;
+          // Produto usa SOMENTE o percentual cadastrado nele (pode ser 0)
+          commissionPercent = productInfo.commission_percent;
         } else if (item.service_id && serviceMap.has(item.service_id)) {
           const serviceInfo = serviceMap.get(item.service_id)!;
           serviceName = serviceInfo.name;
           commissionPercent = serviceInfo.commission_percent || commissionPercent;
         }
 
-        // Override with per-professional per-service commission if configured (not for packages)
-        if (item.item_type !== "package" && item.service_id && profId) {
+        // Override with per-professional per-service commission if configured (not for packages/products)
+        if (item.item_type === "service" && item.service_id && profId) {
           const profCommKey = `${profId}:${item.service_id}`;
           if (profServiceCommMap.has(profCommKey)) {
             commissionPercent = profServiceCommMap.get(profCommKey)!;
@@ -223,7 +238,7 @@ export default function Comissoes() {
     });
 
     return items;
-  }, [selectedProfessional, filteredComandas, professionals, serviceMap, clientMap, profServiceCommMap, commissionSettings]);
+  }, [selectedProfessional, filteredComandas, professionals, serviceMap, productMap, clientMap, profServiceCommMap, commissionSettings]);
 
   // Calculate totals for selected professional
   const professionalTotals = useMemo(() => {
@@ -326,14 +341,17 @@ export default function Comissoes() {
         if (!profData) return;
 
         // Priority: package_commission > professional_service_commissions > services.commission_percent > professionals.commission_percent
+        // Produtos vendidos: usa products.commission_percent (nao herda do profissional)
         let commissionPercent = profData.professional.commission_percent || 0;
 
         if (item.item_type === "package") {
           commissionPercent = profData.professional.package_commission_percent || commissionPercent;
+        } else if (item.item_type === "product" && item.product_id && productMap.has(item.product_id)) {
+          commissionPercent = productMap.get(item.product_id)!.commission_percent;
         } else if (item.service_id && serviceMap.has(item.service_id)) {
           commissionPercent = serviceMap.get(item.service_id)?.commission_percent || commissionPercent;
         }
-        if (item.item_type !== "package" && item.service_id && profId) {
+        if (item.item_type === "service" && item.service_id && profId) {
           const profCommKey = `${profId}:${item.service_id}`;
           if (profServiceCommMap.has(profCommKey)) {
             commissionPercent = profServiceCommMap.get(profCommKey)!;
@@ -373,7 +391,7 @@ export default function Comissoes() {
     });
 
     return Array.from(commissionMap.values()).filter(c => c.itemCount > 0);
-  }, [professionals, filteredComandas, serviceMap, profServiceCommMap, commissionSettings]);
+  }, [professionals, filteredComandas, serviceMap, productMap, profServiceCommMap, commissionSettings]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -403,7 +421,7 @@ export default function Comissoes() {
 
   const selectedProfessionalData = professionals.find(p => p.id === selectedProfessional);
 
-  const isLoading = loadingProfessionals || loadingComandas || loadingServices || loadingClients || (isProfessionalUser && loadingCurrentProfessional);
+  const isLoading = loadingProfessionals || loadingComandas || loadingServices || loadingProducts || loadingClients || (isProfessionalUser && loadingCurrentProfessional);
 
   const generateCommissionPDF = () => {
     if (!selectedProfessionalData) return;
