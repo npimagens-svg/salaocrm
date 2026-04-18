@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 3;
+export const LATEST_SCHEMA_VERSION = 4;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -40,6 +40,14 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
     description: "Adiciona coluna created_by_name em appointments para registrar quem criou cada agendamento. Exibido no hover card da agenda.",
     statements: [
       `ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS created_by_name TEXT;`,
+    ],
+  },
+  {
+    version: 4,
+    name: "Cashback opcional por padrao",
+    description: "Adiciona loyalty_default_enabled em commission_settings. Por padrao cashback vem desmarcado na comanda; toggle em Marketing > Fidelidade ativa por padrao.",
+    statements: [
+      `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS loyalty_default_enabled BOOLEAN NOT NULL DEFAULT false;`,
     ],
   },
 ];

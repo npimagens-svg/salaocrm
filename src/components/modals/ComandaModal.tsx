@@ -128,7 +128,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const [saveUnderpaymentAsDebt, setSaveUnderpaymentAsDebt] = useState(false);
   const [chargeOldDebt, setChargeOldDebt] = useState(false);
   const [useOldCredit, setUseOldCredit] = useState(false);
-  const [enableCashback, setEnableCashback] = useState(true);
+  const [enableCashback, setEnableCashback] = useState(false);
   const [packagePopoverOpen, setPackagePopoverOpen] = useState(false);
   const [availablePackages, setAvailablePackages] = useState<any[]>([]);
   const [isLoadingPackages, setIsLoadingPackages] = useState(false);
@@ -259,7 +259,8 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
     setComandaDateOverride(null);
     setChargeOldDebt(false);
     setUseOldCredit(false);
-  }, [comanda?.id]);
+    setEnableCashback(!!commissionSettings.loyalty_default_enabled);
+  }, [comanda?.id, commissionSettings.loyalty_default_enabled]);
 
   // Check if comanda's caixa is closed (locked state)
   const comandaCaixa = comanda?.caixa_id ? openCaixas.find(c => c.id === comanda.caixa_id) : null;

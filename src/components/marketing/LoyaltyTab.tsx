@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Loader2, Gift, Clock, CheckCircle, XCircle, Settings, Save } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/dynamicSupabaseClient";
@@ -20,6 +21,7 @@ export function LoyaltyTab() {
     loyalty_percent: settings.loyalty_percent,
     loyalty_validity_days: settings.loyalty_validity_days,
     loyalty_min_purchase: settings.loyalty_min_purchase,
+    loyalty_default_enabled: settings.loyalty_default_enabled,
   });
 
   useEffect(() => {
@@ -27,19 +29,22 @@ export function LoyaltyTab() {
       loyalty_percent: settings.loyalty_percent,
       loyalty_validity_days: settings.loyalty_validity_days,
       loyalty_min_purchase: settings.loyalty_min_purchase,
+      loyalty_default_enabled: settings.loyalty_default_enabled,
     });
-  }, [settings.loyalty_percent, settings.loyalty_validity_days, settings.loyalty_min_purchase]);
+  }, [settings.loyalty_percent, settings.loyalty_validity_days, settings.loyalty_min_purchase, settings.loyalty_default_enabled]);
 
   const isDirty =
     form.loyalty_percent !== settings.loyalty_percent ||
     form.loyalty_validity_days !== settings.loyalty_validity_days ||
-    form.loyalty_min_purchase !== settings.loyalty_min_purchase;
+    form.loyalty_min_purchase !== settings.loyalty_min_purchase ||
+    form.loyalty_default_enabled !== settings.loyalty_default_enabled;
 
   const handleSave = () => {
     save({
       loyalty_percent: form.loyalty_percent,
       loyalty_validity_days: form.loyalty_validity_days,
       loyalty_min_purchase: form.loyalty_min_purchase,
+      loyalty_default_enabled: form.loyalty_default_enabled,
     });
   };
 
@@ -134,6 +139,21 @@ export function LoyaltyTab() {
               </div>
               <p className="text-xs text-muted-foreground">Valor mínimo da próxima comanda pra usar o crédito.</p>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3 bg-muted/30">
+            <div>
+              <Label htmlFor="loyalty_default_enabled" className="font-medium">Ativar cashback por padrão nas comandas</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Se ligado, toda nova comanda já vem com o checkbox de cashback marcado.
+                Desligado: operador marca manualmente por comanda.
+              </p>
+            </div>
+            <Switch
+              id="loyalty_default_enabled"
+              checked={form.loyalty_default_enabled}
+              onCheckedChange={(checked) => setForm({ ...form, loyalty_default_enabled: !!checked })}
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2">

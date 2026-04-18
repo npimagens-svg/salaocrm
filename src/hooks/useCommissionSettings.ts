@@ -37,6 +37,7 @@ export interface CommissionSettings {
   loyalty_percent: number;
   loyalty_validity_days: number;
   loyalty_min_purchase: number;
+  loyalty_default_enabled: boolean;
 }
 
 const DEFAULTS: Omit<CommissionSettings, "id" | "salon_id"> = {
@@ -66,6 +67,7 @@ const DEFAULTS: Omit<CommissionSettings, "id" | "salon_id"> = {
   loyalty_percent: 7,
   loyalty_validity_days: 15,
   loyalty_min_purchase: 100,
+  loyalty_default_enabled: false,
 };
 
 export function useCommissionSettings() {
