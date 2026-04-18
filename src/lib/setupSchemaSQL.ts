@@ -519,6 +519,9 @@ CREATE TABLE public.commission_settings (
   dual_assistant_rule TEXT NOT NULL DEFAULT 'full_value',
   receipt_footer_message TEXT NOT NULL DEFAULT '',
   pix_fee_percent NUMERIC NOT NULL DEFAULT 0,
+  loyalty_percent NUMERIC NOT NULL DEFAULT 7,
+  loyalty_validity_days INTEGER NOT NULL DEFAULT 15,
+  loyalty_min_purchase NUMERIC NOT NULL DEFAULT 100,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(salon_id)

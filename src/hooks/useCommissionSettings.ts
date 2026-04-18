@@ -33,6 +33,10 @@ export interface CommissionSettings {
   package_commission_percent: number;
   dual_assistant_rule: string;
   receipt_footer_message: string;
+  // Programa de Fidelidade (Cashback)
+  loyalty_percent: number;
+  loyalty_validity_days: number;
+  loyalty_min_purchase: number;
 }
 
 const DEFAULTS: Omit<CommissionSettings, "id" | "salon_id"> = {
@@ -59,6 +63,9 @@ const DEFAULTS: Omit<CommissionSettings, "id" | "salon_id"> = {
   package_commission_percent: 0,
   dual_assistant_rule: "full_value",
   receipt_footer_message: "",
+  loyalty_percent: 7,
+  loyalty_validity_days: 15,
+  loyalty_min_purchase: 100,
 };
 
 export function useCommissionSettings() {

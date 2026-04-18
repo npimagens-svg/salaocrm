@@ -4,21 +4,23 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { addDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { sendEmail } from "@/lib/sendEmail";
-
-const LOYALTY_PERCENT = 0.07; // 7%
-const LOYALTY_VALIDITY_DAYS = 15;
-const MIN_PURCHASE_AMOUNT = 100;
+import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 
 export function useGenerateLoyaltyCredit() {
   const { salonId } = useAuth();
   const queryClient = useQueryClient();
+  const { settings } = useCommissionSettings();
 
   return useMutation({
     mutationFn: async ({ clientId, comandaId, comandaTotal }: { clientId: string; comandaId: string; comandaTotal: number }) => {
       if (!salonId || !clientId || comandaTotal <= 0) return null;
 
-      const creditAmount = Math.round(comandaTotal * LOYALTY_PERCENT * 100) / 100;
-      const expiresAt = addDays(new Date(), LOYALTY_VALIDITY_DAYS).toISOString();
+      const percent = (settings.loyalty_percent || 0) / 100;
+      const validityDays = settings.loyalty_validity_days || 15;
+      const minPurchase = settings.loyalty_min_purchase || 0;
+
+      const creditAmount = Math.round(comandaTotal * percent * 100) / 100;
+      const expiresAt = addDays(new Date(), validityDays).toISOString();
 
       const { data, error } = await supabase
         .from("client_credits")
@@ -27,7 +29,7 @@ export function useGenerateLoyaltyCredit() {
           client_id: clientId,
           comanda_id: comandaId,
           credit_amount: creditAmount,
-          min_purchase_amount: MIN_PURCHASE_AMOUNT,
+          min_purchase_amount: minPurchase,
           expires_at: expiresAt,
         })
         .select("*, clients(name, email)")

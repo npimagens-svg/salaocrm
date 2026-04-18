@@ -1174,15 +1174,18 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             .reduce((sum, item) => sum + (item.total_price || 0), 0);
 
           if (servicesTotal > 0) {
-            const creditAmount = Math.round(servicesTotal * 0.07 * 100) / 100;
+            const loyaltyPercent = (commissionSettings.loyalty_percent || 0) / 100;
+            const validityDays = commissionSettings.loyalty_validity_days || 15;
+            const minPurchase = commissionSettings.loyalty_min_purchase || 0;
+            const creditAmount = Math.round(servicesTotal * loyaltyPercent * 100) / 100;
             const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + 15);
+            expiresAt.setDate(expiresAt.getDate() + validityDays);
             await supabase.from("client_credits").insert({
               salon_id: salonId,
               client_id: comanda.client_id,
               comanda_id: comanda.id,
               credit_amount: creditAmount,
-              min_purchase_amount: 100,
+              min_purchase_amount: minPurchase,
               expires_at: expiresAt.toISOString(),
             });
 

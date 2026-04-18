@@ -7,9 +7,11 @@ import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 
 export default function ClientLoyalty() {
   const { salonId } = useAuth();
+  const { settings } = useCommissionSettings();
 
   const { data: credits, isLoading } = useQuery({
     queryKey: ["client-credits", salonId],
@@ -43,7 +45,7 @@ export default function ClientLoyalty() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Programa de Fidelidade</h1>
-          <p className="text-muted-foreground">Créditos de desconto gerados automaticamente ao fechar comandas (7% do valor, válido por 15 dias para compras acima de R$100)</p>
+          <p className="text-muted-foreground">Créditos de desconto gerados automaticamente ao fechar comandas ({settings.loyalty_percent}% do valor, válido por {settings.loyalty_validity_days} dias para compras acima de R$ {Number(settings.loyalty_min_purchase).toFixed(2).replace(".", ",")})</p>
         </div>
 
         {/* Stats */}
