@@ -105,6 +105,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const { hasPermission, professionalId: currentProfessionalId, isMaster } = useCurrentUserPermissions();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("itens");
+  const [debtAlertDismissed, setDebtAlertDismissed] = useState(false);
   const { items, isLoading, addItem, removeItem, isAdding, isRemoving } = useComandaItems(comanda?.id || null);
   const { reopenComanda, isReopening } = useComandas();
   const { calculateServiceCost } = useAllServiceProducts();
@@ -252,6 +253,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   // Reset override when comanda changes
   useEffect(() => {
     setComandaDateOverride(null);
+    setDebtAlertDismissed(false);
   }, [comanda?.id]);
 
   // Check if comanda's caixa is closed (locked state)
@@ -1365,15 +1367,44 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                 </CardContent>
               </Card>
 
-              {/* Client Debt Warning */}
-              {comanda.client_id && clientNetBalance < 0 && (
+              {/* Client Debt Warning com acoes */}
+              {comanda.client_id && clientNetBalance < 0 && !debtAlertDismissed && (
                 <Card className="border-destructive/50 bg-destructive/10">
-                  <CardContent className="p-3">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
-                      <div>
-                        <p className="font-medium text-destructive text-sm">
-                          Este cliente possui divida de {formatCurrency(Math.abs(clientNetBalance))}
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <p className="font-semibold text-destructive text-sm">
+                            Cliente possui divida em aberto de {formatCurrency(Math.abs(clientNetBalance))}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Valor pendente de comandas anteriores. Escolha o que fazer:
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setActiveTab("pagamento")}
+                          >
+                            Cobrar nesta comanda
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDebtAlertDismissed(true)}
+                          >
+                            Manter em aberto
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-1">
+                          <strong>Cobrar:</strong> abra a aba Pagamento e lance o valor total (itens + divida).
+                          O sistema quita a divida automaticamente ao fechar.
+                          <br />
+                          <strong>Manter:</strong> a divida continua registrada no cadastro do cliente.
                         </p>
                       </div>
                     </div>
