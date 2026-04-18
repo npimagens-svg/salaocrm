@@ -127,6 +127,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const [saveOverpaymentAsCredit, setSaveOverpaymentAsCredit] = useState(false);
   const [saveUnderpaymentAsDebt, setSaveUnderpaymentAsDebt] = useState(false);
   const [chargeOldDebt, setChargeOldDebt] = useState(false);
+  const [useOldCredit, setUseOldCredit] = useState(false);
   const [enableCashback, setEnableCashback] = useState(true);
   const [packagePopoverOpen, setPackagePopoverOpen] = useState(false);
   const [availablePackages, setAvailablePackages] = useState<any[]>([]);
@@ -257,6 +258,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   useEffect(() => {
     setComandaDateOverride(null);
     setChargeOldDebt(false);
+    setUseOldCredit(false);
   }, [comanda?.id]);
 
   // Check if comanda's caixa is closed (locked state)
@@ -829,7 +831,9 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const subtotal = editableItems.reduce((acc, item) => acc + Number(item.total_price), 0);
   const totalPayments = payments.reduce((acc, p) => acc + p.amount, 0);
   const oldDebtToCharge = chargeOldDebt && clientNetBalance < 0 ? Math.abs(clientNetBalance) : 0;
-  const totalToCharge = subtotal + oldDebtToCharge;
+  // Credito usado limitado ao subtotal (cliente nao pode pegar "troco" em dinheiro do voucher)
+  const oldCreditToUse = useOldCredit && clientNetBalance > 0 ? Math.min(clientNetBalance, subtotal) : 0;
+  const totalToCharge = Math.max(0, subtotal + oldDebtToCharge - oldCreditToUse);
   const difference = totalToCharge - totalPayments;
 
   const handlePrintReceipt = () => {
@@ -1294,6 +1298,50 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         }
       }
 
+      // Usa credito anterior quando usuario marcou "Usar credito". Registra um debt em
+      // client_balance pra baixar o saldo. Tambem tenta marcar client_credits (cashback)
+      // ate cobrir o valor, priorizando os que vencem primeiro.
+      if (useOldCredit && comanda.client_id && oldCreditToUse > 0) {
+        try {
+          await supabase.from("client_balance").insert({
+            salon_id: salonId,
+            client_id: comanda.client_id,
+            type: "debt",
+            amount: Math.round(oldCreditToUse * 100) / 100,
+            description: `Uso de credito na comanda ${comandaRef}`,
+            comanda_id: comanda.id,
+          });
+
+          // Consome client_credits (cashback) em FIFO por validade
+          let remaining = oldCreditToUse;
+          const { data: availCredits } = await supabase
+            .from("client_credits")
+            .select("id, credit_amount")
+            .eq("salon_id", salonId)
+            .eq("client_id", comanda.client_id)
+            .eq("is_used", false)
+            .eq("is_expired", false)
+            .gt("expires_at", new Date().toISOString())
+            .order("expires_at", { ascending: true });
+
+          for (const c of (availCredits || [])) {
+            if (remaining <= 0.01) break;
+            const amount = Number((c as any).credit_amount);
+            await supabase
+              .from("client_credits")
+              .update({
+                is_used: true,
+                used_at: new Date().toISOString(),
+                used_in_comanda_id: comanda.id,
+              })
+              .eq("id", (c as any).id);
+            remaining -= amount;
+          }
+        } catch (creditError) {
+          console.error("Erro ao registrar uso de credito:", creditError);
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["comandas"] });
       queryClient.invalidateQueries({ queryKey: ["comanda_items", comanda.id] });
       queryClient.invalidateQueries({ queryKey: ["caixas", salonId] });
@@ -1432,6 +1480,50 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                         {chargeOldDebt && (
                           <p className="text-xs text-green-700 font-medium pt-1">
                             Divida sera adicionada ao Total a Cobrar. Ao fechar, sera quitada automaticamente.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Alerta de credito com acoes */}
+              {comanda.client_id && clientNetBalance > 0 && !isComandaLocked && (
+                <Card className="border-green-500/40 bg-green-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Wallet className="h-5 w-5 text-green-700 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <p className="font-semibold text-green-800 text-sm">
+                            Cliente possui credito de {formatCurrency(clientNetBalance)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Voucher / cashback / troco salvo. Deseja usar agora?
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => { setUseOldCredit(true); setActiveTab("pagamento"); }}
+                          >
+                            Usar credito nesta comanda
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setUseOldCredit(false)}
+                          >
+                            Nao usar agora
+                          </Button>
+                        </div>
+                        {useOldCredit && (
+                          <p className="text-xs text-green-700 font-medium pt-1">
+                            Credito sera descontado do Total a Cobrar. Ao fechar, sera baixado do saldo.
                           </p>
                         )}
                       </div>
@@ -1840,9 +1932,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
               <div className="text-center py-2">
                 <Label className="text-xs text-muted-foreground">Total a Cobrar:</Label>
                 <p className="text-3xl font-bold text-destructive">{formatCurrency(totalToCharge)}</p>
-                {oldDebtToCharge > 0 && (
+                {(oldDebtToCharge > 0 || oldCreditToUse > 0) && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Itens {formatCurrency(subtotal)} + divida anterior {formatCurrency(oldDebtToCharge)}
+                    Itens {formatCurrency(subtotal)}
+                    {oldDebtToCharge > 0 && <> + divida anterior {formatCurrency(oldDebtToCharge)}</>}
+                    {oldCreditToUse > 0 && <> − credito usado {formatCurrency(oldCreditToUse)}</>}
                   </p>
                 )}
               </div>
@@ -1854,6 +1948,13 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                     <Checkbox id="charge-old-debt" checked={chargeOldDebt} onCheckedChange={(checked) => setChargeOldDebt(!!checked)} />
                     <AlertTriangle className="h-3.5 w-3.5" />
                     Cobrar divida anterior ({formatCurrency(Math.abs(clientNetBalance))})
+                  </label>
+                )}
+                {comanda?.client_id && clientNetBalance > 0 && subtotal > 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer text-green-700">
+                    <Checkbox id="use-old-credit" checked={useOldCredit} onCheckedChange={(checked) => setUseOldCredit(!!checked)} />
+                    <Wallet className="h-3.5 w-3.5" />
+                    Usar credito ({formatCurrency(Math.min(clientNetBalance, subtotal))})
                   </label>
                 )}
                 {comanda?.client_id && (
