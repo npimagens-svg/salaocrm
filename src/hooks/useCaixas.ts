@@ -51,20 +51,28 @@ export function useCaixas() {
 
       if (caixasError) throw caixasError;
 
-      // Fetch profiles for all user_ids
+      // Fetch profiles + professional avatars for all user_ids
       const userIds = [...new Set(caixasData.map(c => c.user_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, avatar_url")
-        .in("user_id", userIds);
+      const [{ data: profiles }, { data: professionals }] = await Promise.all([
+        supabase.from("profiles").select("user_id, full_name, avatar_url").in("user_id", userIds),
+        supabase.from("professionals").select("user_id, avatar_url").in("user_id", userIds),
+      ]);
 
-      // Map profiles to caixas
+      // Map profiles to caixas, using professional avatar as fallback
       const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
-      
-      return caixasData.map(caixa => ({
-        ...caixa,
-        profile: profileMap.get(caixa.user_id) || undefined,
-      })) as Caixa[];
+      const profAvatarMap = new Map(professionals?.map(p => [p.user_id, p.avatar_url]) || []);
+
+      return caixasData.map(caixa => {
+        const profile = profileMap.get(caixa.user_id);
+        const profAvatar = profAvatarMap.get(caixa.user_id);
+        return {
+          ...caixa,
+          profile: profile ? {
+            ...profile,
+            avatar_url: profile.avatar_url || profAvatar || null,
+          } : undefined,
+        };
+      }) as Caixa[];
     },
     enabled: !!salonId,
   });
@@ -308,16 +316,18 @@ export function useCaixas() {
 
     if (!caixaData) return null;
 
-    // Fetch profile for this user
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("user_id, full_name, avatar_url")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // Fetch profile + professional avatar for this user
+    const [{ data: profileData }, { data: profData }] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, avatar_url").eq("user_id", user.id).maybeSingle(),
+      supabase.from("professionals").select("avatar_url").eq("user_id", user.id).maybeSingle(),
+    ]);
 
     return {
       ...caixaData,
-      profile: profileData || undefined,
+      profile: profileData ? {
+        ...profileData,
+        avatar_url: profileData.avatar_url || profData?.avatar_url || null,
+      } : undefined,
     } as Caixa;
   };
 

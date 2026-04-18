@@ -141,7 +141,7 @@ export default function Financeiro() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {userOpenCaixa && (
                   <div className="ring-2 ring-primary rounded-lg">
                     <CaixaCard
@@ -304,7 +304,7 @@ export default function Financeiro() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {caixasByDate.map((caixa) => (
                     <CaixaCard 
                       key={caixa.id} 

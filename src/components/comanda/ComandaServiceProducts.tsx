@@ -263,6 +263,31 @@ export function ComandaServiceProducts({
             </div>
           )}
 
+          {/* Save button — top, away from add area */}
+          {productUsages.length > 0 && !disabled && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className={cn(
+                  "gap-2",
+                  isSaved && "bg-green-600 hover:bg-green-700",
+                  isDirty && "animate-pulse"
+                )}
+                onClick={saveProducts}
+              >
+                <Save className="h-4 w-4" />
+                {isSaved ? "Salvo!" : "Salvar Produtos"}
+              </Button>
+              {isDirty && (
+                <span className="text-xs text-amber-600 font-medium">Alterações não salvas</span>
+              )}
+              {isSaved && (
+                <span className="text-xs text-green-600 font-medium">Custo atualizado na comanda</span>
+              )}
+            </div>
+          )}
+
           {productUsages.length === 0 && savedProductCost === 0 ? (
             <p className="text-sm text-muted-foreground italic py-2">
               Nenhum produto vinculado a este serviço. Clique em "Adicionar Produto" para incluir.
@@ -350,31 +375,6 @@ export function ComandaServiceProducts({
             ))
           )}
 
-          {/* Save button + feedback */}
-          {productUsages.length > 0 && !disabled && (
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                className={cn(
-                  "gap-2",
-                  isSaved && "bg-green-600 hover:bg-green-700",
-                  isDirty && "animate-pulse"
-                )}
-                onClick={saveProducts}
-              >
-                <Save className="h-4 w-4" />
-                {isSaved ? "Salvo!" : isDirty ? "Salvar Produtos" : "Salvar Produtos"}
-              </Button>
-              {isDirty && (
-                <span className="text-xs text-amber-600 font-medium">Alterações não salvas</span>
-              )}
-              {isSaved && (
-                <span className="text-xs text-green-600 font-medium">Custo atualizado na comanda</span>
-              )}
-            </div>
-          )}
-
           {/* Add new product row */}
           {isAddingProduct ? (
             <div className="p-2 rounded-md bg-primary/10 border border-primary/40 space-y-2">
@@ -445,22 +445,41 @@ export function ComandaServiceProducts({
                         Nenhum produto encontrado
                       </div>
                     ) : (
-                      filtered.map((product) => (
-                        <button
-                          key={product.id}
-                          type="button"
-                          className={cn(
-                            "w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors flex items-center justify-between",
-                            newProductId === product.id && "bg-primary/10 font-medium"
-                          )}
-                          onClick={() => setNewProductId(product.id)}
-                        >
-                          <span>{product.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {getUnitLabel(product.unit_of_measure || "unidade")}
-                          </span>
-                        </button>
-                      ))
+                      filtered.map((product) => {
+                        const isFrac = ["ml", "g", "dosagem", "cm"].includes(product.unit_of_measure || "");
+                        const costPerUnit = (product.cost_price || 0) / (product.unit_quantity || 1);
+                        return (
+                          <button
+                            key={product.id}
+                            type="button"
+                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors flex items-center justify-between"
+                            onClick={() => {
+                              // Add directly to list with default quantity
+                              const newUsage: ProductUsage = {
+                                id: `new_${Date.now()}`,
+                                product_id: product.id,
+                                product_name: product.name,
+                                quantity_units: isFrac ? 0 : 1,
+                                quantity_fractional: isFrac ? 1 : 0,
+                                unit_of_measure: product.unit_of_measure || "unidade",
+                                unit_quantity: product.unit_quantity || 1,
+                                cost_per_unit: costPerUnit,
+                                total_cost: isFrac ? costPerUnit : costPerUnit * (product.unit_quantity || 1),
+                                isNew: true,
+                              };
+                              setProductUsages(prev => [...prev, newUsage]);
+                              setIsDirty(true);
+                              setIsSaved(false);
+                              setProductSearch("");
+                            }}
+                          >
+                            <span>{product.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {getUnitLabel(product.unit_of_measure || "unidade")}
+                            </span>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 );

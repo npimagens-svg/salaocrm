@@ -321,10 +321,9 @@ export function AppointmentModal({
     onOpenChange(false);
   };
 
-  // Get selected client
+  // Get selected client — always use current state (clientId), not the original appointment prop
   const selectedClient = useMemo(() => {
-    const cid = appointment?.client_id || clientId;
-    return cid ? clients.find((c) => c.id === cid) : null;
+    return clientId ? clients.find((c) => c.id === clientId) : null;
   }, [appointment?.client_id, clientId, clients]);
 
   // Check if comanda button should show:
@@ -375,11 +374,30 @@ export function AppointmentModal({
       });
   }, [appointment?.scheduled_at, open]);
 
-  const handleOpenComanda = () => {
-    if (appointment?.id) {
-      navigate(`/comandas?appointment=${appointment.id}`);
-      onOpenChange(false);
+  const handleOpenComanda = async () => {
+    if (!appointment?.id) return;
+
+    // Save any pending changes (e.g. client swap) before navigating
+    const block = serviceBlocks[0];
+    if (block) {
+      const scheduled_at = new Date(`${date}T${block.time}`).toISOString();
+      await supabase
+        .from("appointments")
+        .update({
+          client_id: clientId || appointment.client_id,
+          professional_id: block.professional_id,
+          service_id: block.service_id,
+          scheduled_at,
+          duration_minutes: block.duration_minutes,
+          status,
+          notes: notes || null,
+          price: block.price,
+        })
+        .eq("id", appointment.id);
     }
+
+    navigate(`/comandas?appointment=${appointment.id}`);
+    onOpenChange(false);
   };
 
   const activeServices = useMemo(() => services.filter((s) => s.is_active), [services]);

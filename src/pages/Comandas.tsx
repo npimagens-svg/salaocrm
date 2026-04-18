@@ -65,12 +65,13 @@ export default function Comandas() {
   const [userOpenCaixaId, setUserOpenCaixaId] = useState<string | null>(null);
   const [clientModalOpen, setClientModalOpen] = useState(false);
   const [newClientName, setNewClientName] = useState("");
+  const [viewClientId, setViewClientId] = useState<string | null>(null);
 
   const { user, salonId, isMaster } = useAuth();
   const queryClient = useQueryClient();
   const { hasPendingCaixa, message: pendingCaixaMessage } = usePendingCaixaCheck();
   const { comandas, isLoading, createComanda, findOrCreateTodayComanda, isCreating } = useComandas();
-  const { clients, createClient } = useClients();
+  const { clients, createClient, updateClient } = useClients();
   const { professionals } = useProfessionals();
   const { services } = useServices();
   const { getCurrentUserOpenCaixa, openCaixas, caixas } = useCaixas();
@@ -333,6 +334,11 @@ export default function Comandas() {
     setSelectedComanda(null);
     setComandaModalOpen(false);
     setEditingClosedComanda(false);
+  };
+
+  const handleViewClientFromComanda = (clientId: string) => {
+    setViewClientId(clientId);
+    setClientModalOpen(true);
   };
 
   const handleDeleteClick = (comanda: Comanda) => {
@@ -723,28 +729,6 @@ export default function Comandas() {
         </DialogContent>
       </Dialog>
 
-      {/* Client Modal for quick registration */}
-      <ClientModal
-        open={clientModalOpen}
-        onOpenChange={(open) => {
-          setClientModalOpen(open);
-          if (!open) setNewClientName("");
-        }}
-        client={newClientName ? { name: newClientName } as any : null}
-        onSubmit={(data) => {
-          // Create client and then select it
-          createClient(data, {
-            onSuccess: (newClient: any) => {
-              if (newClient?.id) {
-                setFormData({ ...formData, client_id: newClient.id });
-              }
-              setClientModalOpen(false);
-              setNewClientName("");
-            }
-          } as any);
-        }}
-      />
-
       {/* Comanda Modal */}
       <ComandaModal
         comanda={selectedComanda}
@@ -758,6 +742,37 @@ export default function Comandas() {
         onDelete={(comanda) => {
           setComandaModalOpen(false);
           handleDeleteClick(comanda);
+        }}
+        onViewClient={handleViewClientFromComanda}
+      />
+
+      {/* Client Modal — rendered AFTER ComandaModal so it appears on top */}
+      <ClientModal
+        open={clientModalOpen}
+        onOpenChange={(open) => {
+          setClientModalOpen(open);
+          if (!open) { setNewClientName(""); setViewClientId(null); }
+        }}
+        client={viewClientId ? clients.find(c => c.id === viewClientId) || undefined : newClientName ? { name: newClientName } as any : undefined}
+        onSubmit={(data) => {
+          if (viewClientId) {
+            updateClient({ ...data, id: viewClientId }, {
+              onSuccess: () => {
+                setClientModalOpen(false);
+                setViewClientId(null);
+              }
+            } as any);
+          } else {
+            createClient(data, {
+              onSuccess: (newClient: any) => {
+                if (newClient?.id) {
+                  setFormData({ ...formData, client_id: newClient.id });
+                }
+                setClientModalOpen(false);
+                setNewClientName("");
+              }
+            } as any);
+          }
         }}
       />
 

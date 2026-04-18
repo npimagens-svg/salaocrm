@@ -47,6 +47,7 @@ interface ComandaModalProps {
   userCaixaId?: string | null;
   onDelete?: (comanda: Comanda) => void;
   openCaixas?: Caixa[];
+  onViewClient?: (clientId: string) => void;
 }
 
 interface EditableItem extends ComandaItem {
@@ -55,6 +56,8 @@ interface EditableItem extends ComandaItem {
   editUnitPrice?: number;
   editDiscount?: number;
   editProfessionalId?: string | null;
+  editServiceId?: string | null;
+  editDescription?: string | null;
   isProductsExpanded?: boolean;
 }
 
@@ -99,13 +102,12 @@ const INSTALLMENT_OPTIONS = [
   { value: 17, label: "17x" }, { value: 18, label: "18x" },
 ];
 
-export function ComandaModal({ comanda, open, onClose, professionals, services, isEditingClosed = false, userCaixaId, onDelete, openCaixas = [] }: ComandaModalProps) {
+export function ComandaModal({ comanda, open, onClose, professionals, services, isEditingClosed = false, userCaixaId, onDelete, openCaixas = [], onViewClient }: ComandaModalProps) {
   const { toast } = useToast();
   const { salonId } = useAuth();
   const { hasPermission, professionalId: currentProfessionalId, isMaster } = useCurrentUserPermissions();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("itens");
-  const [debtAlertDismissed, setDebtAlertDismissed] = useState(false);
   const { items, isLoading, addItem, removeItem, isAdding, isRemoving } = useComandaItems(comanda?.id || null);
   const { reopenComanda, isReopening } = useComandas();
   const { calculateServiceCost } = useAllServiceProducts();
@@ -253,7 +255,6 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   // Reset override when comanda changes
   useEffect(() => {
     setComandaDateOverride(null);
-    setDebtAlertDismissed(false);
   }, [comanda?.id]);
 
   // Check if comanda's caixa is closed (locked state)
@@ -412,23 +413,35 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
     let packageLabel = "";
     if (comanda.client_id) {
       try {
-        // Get active client packages with their package items
+        // Step 1: Get active client packages
         const { data: clientPackages } = await supabase
           .from("client_packages")
-          .select("id, package_id, package:packages(name, package_items(service_id, quantity))")
+          .select("id, package_id")
           .eq("client_id", comanda.client_id)
           .eq("salon_id", salonId)
           .eq("status", "active");
 
         if (clientPackages && clientPackages.length > 0) {
-          // For each client package, check if it contains this service
           for (const cp of clientPackages) {
-            const pkgItems = (cp as any).package?.package_items || [];
-            const pkgItem = pkgItems.find((i: any) => i.service_id === serviceId);
+            // Step 2: Get package name
+            const { data: pkg } = await supabase
+              .from("packages")
+              .select("name")
+              .eq("id", cp.package_id)
+              .single();
+
+            // Step 3: Check if this package contains the service
+            const { data: pkgItem } = await supabase
+              .from("package_items")
+              .select("quantity")
+              .eq("package_id", cp.package_id)
+              .eq("service_id", serviceId)
+              .maybeSingle();
+
             if (!pkgItem) continue;
             const totalCredits = pkgItem.quantity;
 
-            // Count existing usage for this service in this package
+            // Step 4: Count existing usage
             const { count: usageCount } = await supabase
               .from("client_package_usage")
               .select("id", { count: "exact", head: true })
@@ -446,7 +459,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                 notes: `Uso automático via comanda #${comandaRef}`,
               });
 
-              const pkgName = (cp as any).package?.name || "Pacote";
+              const pkgName = pkg?.name || "Pacote";
               packageLabel = `📦 ${pkgName} (${used + 1}/${totalCredits})`;
               usedPackageCredit = true;
               break;
@@ -581,13 +594,20 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       total_price: item.total_price,
     };
 
+    const updateData: any = {
+      quantity: newQuantity,
+      unit_price: newUnitPrice,
+      total_price: newTotalPrice,
+    };
+    // Update service if changed
+    if (item.editServiceId && item.editServiceId !== item.service_id) {
+      updateData.service_id = item.editServiceId;
+      updateData.description = item.editDescription || item.description;
+    }
+
     const { error } = await supabase
       .from("comanda_items")
-      .update({
-        quantity: newQuantity,
-        unit_price: newUnitPrice,
-        total_price: newTotalPrice,
-      })
+      .update(updateData)
       .eq("id", item.id);
 
     if (error) {
@@ -1118,11 +1138,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         throw new Error(`Erro ao fechar comanda: ${closeError.message}`);
       }
 
-      // Update linked appointments to "completed" status (azul na agenda)
+      // Update linked appointments to "paid" status
       if (comanda.appointment_id) {
         await supabase
           .from("appointments")
-          .update({ status: "completed" })
+          .update({ status: "paid" })
           .eq("id", comanda.appointment_id);
       }
       // Also update appointments linked via comanda_items.source_appointment_id
@@ -1132,7 +1152,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       if (appointmentIds.length > 0) {
         await supabase
           .from("appointments")
-          .update({ status: "completed" })
+          .update({ status: "paid" })
           .in("id", appointmentIds);
       }
 
@@ -1156,16 +1176,6 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         }
       }
 
-      // Limpa registros de saldo gerados em fechamentos anteriores desta comanda.
-      // Sem isso, reabrir+refechar duplicava entradas em client_debts/credits/balance.
-      if (comanda.client_id) {
-        await Promise.all([
-          supabase.from("client_credits").delete().eq("comanda_id", comanda.id),
-          supabase.from("client_debts" as any).delete().eq("comanda_id", comanda.id),
-          supabase.from("client_balance").delete().eq("comanda_id", comanda.id),
-        ]);
-      }
-
       // Generate loyalty credit (7% of full-price SERVICES only — no packages, no discounts)
       if (enableCashback && comanda.client_id) {
         try {
@@ -1186,18 +1196,15 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             .reduce((sum, item) => sum + (item.total_price || 0), 0);
 
           if (servicesTotal > 0) {
-            const loyaltyPercent = (commissionSettings.loyalty_percent || 0) / 100;
-            const validityDays = commissionSettings.loyalty_validity_days || 15;
-            const minPurchase = commissionSettings.loyalty_min_purchase || 0;
-            const creditAmount = Math.round(servicesTotal * loyaltyPercent * 100) / 100;
+            const creditAmount = Math.round(servicesTotal * 0.07 * 100) / 100;
             const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + validityDays);
+            expiresAt.setDate(expiresAt.getDate() + 15);
             await supabase.from("client_credits").insert({
               salon_id: salonId,
               client_id: comanda.client_id,
               comanda_id: comanda.id,
               credit_amount: creditAmount,
-              min_purchase_amount: minPurchase,
+              min_purchase_amount: 100,
               expires_at: expiresAt.toISOString(),
             });
 
@@ -1290,7 +1297,6 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       queryClient.invalidateQueries({ queryKey: ["client-credits"] });
       queryClient.invalidateQueries({ queryKey: ["client_comandas"] });
       queryClient.invalidateQueries({ queryKey: ["client_balance"] });
-      queryClient.invalidateQueries({ queryKey: ["client_net_balance"] });
       toast({ title: "Comanda finalizada com sucesso!" });
       onClose();
     } catch (error: any) {
@@ -1304,124 +1310,87 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[95vw] lg:max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-primary text-lg">
-              Comanda {getComandaNumber()} - {comanda.client?.name || "Cliente"}
-            </DialogTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              {isMaster && !comanda.closed_at ? (
-                <Input
-                  type="date"
-                  className="h-7 w-36 text-sm"
-                  value={format(comandaDate, "yyyy-MM-dd")}
-                  max={format(today, "yyyy-MM-dd")}
-                  onChange={async (e) => {
-                    if (!e.target.value || !comanda) return;
-                    const newDate = new Date(e.target.value + "T12:00:00");
-                    setComandaDateOverride(newDate);
-                    // Update in database
-                    await supabase
-                      .from("comandas")
-                      .update({ created_at: newDate.toISOString() })
-                      .eq("id", comanda.id);
-                    queryClient.invalidateQueries({ queryKey: ["comandas", salonId] });
-                  }}
-                />
-              ) : (
-                <span>{format(comandaDate, "dd/MM/yyyy", { locale: ptBR })}</span>
-              )}
-            </div>
+      <DialogContent className="max-w-[95vw] lg:max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0">
+        {/* Avec-style Header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b bg-background">
+          <div className="flex items-center gap-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="bg-transparent h-auto p-0 gap-6">
+                <TabsTrigger value="itens" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-0 pb-2 text-sm font-medium text-muted-foreground hover:text-foreground">Itens</TabsTrigger>
+                <TabsTrigger value="pagamento" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-0 pb-2 text-sm font-medium text-muted-foreground hover:text-foreground">Pagamento</TabsTrigger>
+                <TabsTrigger value="prontuario" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-0 pb-2 text-sm font-medium text-muted-foreground hover:text-foreground">Prontuário</TabsTrigger>
+                <TabsTrigger value="informacoes" className="bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-0 pb-2 text-sm font-medium text-muted-foreground hover:text-foreground">Informações</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-        </DialogHeader>
+          <div className="flex items-center gap-3">
+            <span className="text-lg font-bold text-primary">
+              Comanda {getComandaNumber()} - {comanda.client?.name || "Cliente"}
+            </span>
+          </div>
+        </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="w-full justify-start">
-              <TabsTrigger value="itens">Itens</TabsTrigger>
-              <TabsTrigger value="pagamento">Pagamento</TabsTrigger>
-              <TabsTrigger value="prontuario">Prontuário</TabsTrigger>
-              <TabsTrigger value="informacoes">Informações</TabsTrigger>
-            </TabsList>
-
             <TabsContent value="itens" className="space-y-4 mt-4">
               {/* Locked Comanda Warning */}
               {isComandaLocked && (
-                <Card className="border-destructive bg-destructive/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <X className="h-5 w-5 text-destructive" />
-                      <div>
-                        <p className="font-medium text-destructive">Comanda Bloqueada</p>
-                        <p className="text-sm text-muted-foreground">
-                          Esta comanda está fechada e o caixa associado foi encerrado. 
-                          Para editar, reabra o caixa na página Financeiro → Histórico.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Client Info */}
-              <Card className="bg-muted/30">
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-4">
-                    <Label className="font-semibold">Cliente:</Label>
-                    <span className="font-medium">{comanda.client?.name || "Não definido"}</span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                <div className="flex items-center gap-3 p-3 rounded-md border border-destructive bg-destructive/10">
+                  <X className="h-5 w-5 text-destructive shrink-0" />
+                  <div>
+                    <p className="font-medium text-destructive text-sm">Comanda Bloqueada</p>
+                    <p className="text-xs text-muted-foreground">Reabra o caixa para editar.</p>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Client Debt Warning com acoes */}
-              {comanda.client_id && clientNetBalance < 0 && !debtAlertDismissed && (
-                <Card className="border-destructive/50 bg-destructive/10">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 space-y-2">
-                        <div>
-                          <p className="font-semibold text-destructive text-sm">
-                            Cliente possui divida em aberto de {formatCurrency(Math.abs(clientNetBalance))}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Valor pendente de comandas anteriores. Escolha o que fazer:
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setActiveTab("pagamento")}
-                          >
-                            Cobrar nesta comanda
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setDebtAlertDismissed(true)}
-                          >
-                            Manter em aberto
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground pt-1">
-                          <strong>Cobrar:</strong> abra a aba Pagamento e lance o valor total (itens + divida).
-                          O sistema quita a divida automaticamente ao fechar.
-                          <br />
-                          <strong>Manter:</strong> a divida continua registrada no cadastro do cliente.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                </div>
               )}
+
+              {/* Client Info + Date + Number — Avec inline style */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 py-2 border-b">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-muted-foreground">Cliente:</span>
+                  <span className="font-medium">{comanda.client?.name || "Não definido"}</span>
+                  {onViewClient && comanda.client_id && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onViewClient(comanda.client_id!)} title="Ver cadastro">
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-muted-foreground">Data da Comanda:</span>
+                  {isMaster && !comanda.closed_at ? (
+                    <Input
+                      type="date"
+                      className="h-7 w-36 text-sm"
+                      value={format(comandaDate, "yyyy-MM-dd")}
+                      max={format(today, "yyyy-MM-dd")}
+                      onChange={async (e) => {
+                        if (!e.target.value || !comanda) return;
+                        const newDate = new Date(e.target.value + "T12:00:00");
+                        setComandaDateOverride(newDate);
+                        await supabase.from("comandas").update({ created_at: newDate.toISOString() }).eq("id", comanda.id);
+                        queryClient.invalidateQueries({ queryKey: ["comandas", salonId] });
+                      }}
+                    />
+                  ) : (
+                    <span className="text-sm">{format(comandaDate, "dd/MM/yyyy", { locale: ptBR })}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-muted-foreground">Nº:</span>
+                  <span className="text-sm font-medium">{getComandaNumber()}</span>
+                </div>
+                {/* Debt/Credit inline badge */}
+                {comanda.client_id && clientNetBalance < 0 && (
+                  <Badge variant="destructive" className="text-xs gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Divida {formatCurrency(Math.abs(clientNetBalance))}
+                  </Badge>
+                )}
+                {comanda.client_id && clientNetBalance > 0 && (
+                  <Badge className="bg-green-600 text-xs gap-1">
+                    <Wallet className="h-3 w-3" /> Credito {formatCurrency(clientNetBalance)}
+                  </Badge>
+                )}
+              </div>
 
               {/* Items Table */}
               <Card>
@@ -1456,30 +1425,58 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                           <React.Fragment key={item.id}>
                             <TableRow className="border-b-0">
                               <TableCell className="font-medium">
-                                <div className="flex items-center gap-2">
-                                  <span>{item.description?.includes("📦") ? item.description.split(" — ")[0] : item.description}</span>
-                                  {item.description?.includes("📦") && (
-                                    <Badge variant="secondary" className="text-xs whitespace-nowrap bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
-                                      {item.description.split(" — ")[1]}
-                                    </Badge>
-                                  )}
-                                  {item.service_id && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6 text-muted-foreground hover:text-primary"
-                                      onClick={() => toggleProductsExpanded(item.id)}
-                                      title="Ver/editar produtos consumidos"
-                                    >
-                                      <Package className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                  {item.product_cost > 0 && (
-                                    <span className="text-xs text-muted-foreground">
-                                      Custo prod.: {formatCurrency(item.product_cost)}
-                                    </span>
-                                  )}
-                                </div>
+                                {item.isEditing && item.service_id ? (
+                                  <Select
+                                    value={item.editServiceId || item.service_id || ""}
+                                    onValueChange={(value) => {
+                                      const svc = services.find(s => s.id === value);
+                                      setEditableItems(prev => prev.map(i => {
+                                        if (i.id !== item.id) return i;
+                                        return {
+                                          ...i,
+                                          editServiceId: value,
+                                          editDescription: svc?.name || i.description,
+                                          editUnitPrice: Number(svc?.price) || i.editUnitPrice || i.unit_price,
+                                          total_price: ((i.editQuantity || i.quantity) * (Number(svc?.price) || i.editUnitPrice || i.unit_price)) * (1 - (i.editDiscount || 0) / 100),
+                                        };
+                                      }));
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs min-w-[140px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {services.filter(s => s.is_active).map(svc => (
+                                        <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <span>{item.description?.includes("📦") ? item.description.split(" — ")[0] : item.description}</span>
+                                    {item.description?.includes("📦") && (
+                                      <Badge variant="secondary" className="text-xs whitespace-nowrap bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                                        {item.description.split(" — ")[1]}
+                                      </Badge>
+                                    )}
+                                    {item.service_id && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                        onClick={() => toggleProductsExpanded(item.id)}
+                                        title="Ver/editar produtos consumidos"
+                                      >
+                                        <Package className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                    {item.product_cost > 0 && (
+                                      <span className="text-xs text-muted-foreground">
+                                        Custo prod.: {formatCurrency(item.product_cost)}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <Select 
@@ -1611,23 +1608,21 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                 </CardContent>
               </Card>
 
-              {/* Add Item Section - disabled when locked */}
+              {/* Add Item Section — Avec inline style */}
               {!isComandaLocked && (
-                <Card className="bg-muted/30">
-                  <CardContent className="p-4 space-y-3">
-                    <Label className="text-sm font-medium">Adicionar Serviço</Label>
-                    <ServiceSearchSelect
-                      services={services}
-                      value={null}
-                      onSelect={(serviceId, service) => {
-                        if (serviceId && service) {
-                          handleAddService(serviceId);
-                        }
-                      }}
-                      placeholder="Buscar serviço..."
-                      showPrice
-                    />
-                    <div className="flex items-center gap-2 pt-2">
+                <div className="space-y-3 pt-2">
+                  <ServiceSearchSelect
+                    services={services}
+                    value={null}
+                    onSelect={(serviceId, service) => {
+                      if (serviceId && service) {
+                        handleAddService(serviceId);
+                      }
+                    }}
+                    placeholder="Buscar serviço..."
+                    showPrice
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
                       <Popover open={productPopoverOpen} onOpenChange={(open) => { setProductPopoverOpen(open); if (open) { loadProducts(); setProductSearch(""); } }}>
                         <PopoverTrigger asChild>
                           <Button variant="outline" size="sm" className="gap-2">
@@ -1733,154 +1728,95 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                       </Popover>
                       <Button variant="outline" size="sm">Caixinha</Button>
                     </div>
-                  </CardContent>
-                </Card>
+                </div>
               )}
             </TabsContent>
 
             <TabsContent value="pagamento" className="space-y-4 mt-4">
-              {/* Caixa Selection - inline select */}
-              <div className="flex items-center gap-2">
-                <Label className="text-sm whitespace-nowrap">Caixa:</Label>
-                <Select
-                  value={selectedCaixaId || ""}
-                  onValueChange={(v) => setSelectedCaixaId(v || null)}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Selecione o caixa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableCaixas.map((c) => {
-                      const caixaDate = new Date(c.opened_at);
-                      const sameDay = isSameDay(caixaDate, comandaDate);
-                      const name = c.profile?.full_name || "Usuário";
-                      const dateStr = format(caixaDate, "dd/MM", { locale: ptBR });
-                      return (
-                        <SelectItem key={c.id} value={c.id} disabled={!sameDay}>
-                          {name} ({dateStr}){!sameDay ? " — data diferente" : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Summary Cards */}
-              <div className="grid grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-4">
+              {/* Avec-style Summary Cards — 5 columns */}
+              <div className="grid grid-cols-5 gap-3">
+                <Card className="border">
+                  <CardContent className="p-3">
+                    <Label className="text-xs text-muted-foreground block mb-1">Caixa Responsável:</Label>
+                    <Select value={selectedCaixaId || ""} onValueChange={(v) => setSelectedCaixaId(v || null)}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Selecione um caixa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableCaixas.map((c) => {
+                          const caixaDate = new Date(c.opened_at);
+                          const sameDay = isSameDay(caixaDate, comandaDate);
+                          const name = c.profile?.full_name || "Usuário";
+                          const dateStr = format(caixaDate, "dd/MM", { locale: ptBR });
+                          return (
+                            <SelectItem key={c.id} value={c.id} disabled={!sameDay}>
+                              {name} ({dateStr}){!sameDay ? " — data diferente" : ""}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+                <Card className="border">
+                  <CardContent className="p-3">
                     <Label className="text-xs text-muted-foreground">Total do Serviço:</Label>
-                    <p className="text-xl font-semibold">{formatCurrency(subtotal)}</p>
+                    <p className="text-lg font-semibold">{formatCurrency(subtotal)}</p>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-4">
+                <Card className="border">
+                  <CardContent className="p-3">
                     <Label className="text-xs text-muted-foreground">Total do Produto:</Label>
-                    <p className="text-xl font-semibold">{formatCurrency(0)}</p>
+                    <p className="text-lg font-semibold">{formatCurrency(0)}</p>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-4">
+                <Card className="border">
+                  <CardContent className="p-3">
                     <Label className="text-xs text-muted-foreground">Saldo do Cliente:</Label>
-                    <p className="text-xl font-semibold">0</p>
+                    <p className={`text-lg font-semibold ${clientNetBalance > 0 ? 'text-green-600' : clientNetBalance < 0 ? 'text-destructive' : ''}`}>
+                      {clientNetBalance !== 0 ? formatCurrency(clientNetBalance) : '0'}
+                    </p>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-4">
+                <Card className="border">
+                  <CardContent className="p-3">
                     <Label className="text-xs text-muted-foreground">Diferença:</Label>
-                    <p className={`text-lg font-semibold whitespace-nowrap ${difference > 0 ? 'text-destructive' : difference < 0 ? 'text-green-600' : 'text-foreground'}`}>
-                      {formatCurrency(Math.abs(difference))}
-                      <span className="text-xs font-normal ml-1">
-                        {difference < 0 && '(troco)'}
-                        {difference > 0 && '(falta)'}
-                      </span>
+                    <p className={`text-lg font-semibold ${difference > 0 ? 'text-destructive' : difference < 0 ? 'text-green-600' : ''}`}>
+                      {difference !== 0 ? formatCurrency(-difference) : '0'}
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Save overpayment as credit option */}
-              {difference < -0.01 && comanda?.client_id && (
-                <Card className="border-green-200 bg-green-50/50">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <Checkbox 
-                      id="save-credit"
-                      checked={saveOverpaymentAsCredit}
-                      onCheckedChange={(checked) => setSaveOverpaymentAsCredit(!!checked)}
-                    />
-                    <label htmlFor="save-credit" className="flex items-center gap-2 cursor-pointer text-sm font-medium">
-                      <Gift className="h-4 w-4 text-green-600" />
-                      Salvar {formatCurrency(Math.abs(difference))} como crédito para o cliente
-                    </label>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Total a Cobrar — Avec large centered */}
+              <div className="text-center py-2">
+                <Label className="text-xs text-muted-foreground">Total a Cobrar:</Label>
+                <p className="text-3xl font-bold text-destructive">{formatCurrency(subtotal)}</p>
+              </div>
 
-              {/* Save underpayment as debt option */}
-              {difference > 0.01 && comanda?.client_id && (
-                <Card className="border-destructive/30 bg-destructive/5">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <Checkbox 
-                      id="save-debt"
-                      checked={saveUnderpaymentAsDebt}
-                      onCheckedChange={(checked) => setSaveUnderpaymentAsDebt(!!checked)}
-                    />
-                    <label htmlFor="save-debt" className="flex items-center gap-2 cursor-pointer text-sm font-medium">
-                      <AlertTriangle className="h-4 w-4 text-destructive" />
-                      Salvar {formatCurrency(difference)} como dívida do cliente
-                    </label>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Options row: cashback, credit, debt */}
+              <div className="flex flex-wrap gap-4 text-sm">
+                {comanda?.client_id && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox id="enable-cashback" checked={enableCashback} onCheckedChange={(checked) => setEnableCashback(!!checked)} />
+                    <Gift className="h-3.5 w-3.5 text-primary" />
+                    Cashback 7%
+                  </label>
+                )}
+                {difference < -0.01 && comanda?.client_id && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox id="save-credit" checked={saveOverpaymentAsCredit} onCheckedChange={(checked) => setSaveOverpaymentAsCredit(!!checked)} />
+                    Salvar troco como crédito
+                  </label>
+                )}
+                {difference > 0.01 && comanda?.client_id && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox id="save-debt" checked={saveUnderpaymentAsDebt} onCheckedChange={(checked) => setSaveUnderpaymentAsDebt(!!checked)} />
+                    Salvar como dívida
+                  </label>
+                )}
 
-              {/* Cashback toggle */}
-              {comanda?.client_id && (
-                <Card className="border-primary/20 bg-primary/5">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <Checkbox
-                      id="enable-cashback"
-                      checked={enableCashback}
-                      onCheckedChange={(checked) => setEnableCashback(!!checked)}
-                    />
-                    <label htmlFor="enable-cashback" className="flex items-center gap-2 cursor-pointer text-sm font-medium">
-                      <Gift className="h-4 w-4 text-primary" />
-                      Gerar cashback de 7% sobre serviços para esta cliente
-                    </label>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Debt breakdown when client has pending debt */}
-              {comanda?.client_id && clientNetBalance < 0 && (
-                <Card className="border-orange-200 bg-orange-50/50">
-                  <CardContent className="p-4 space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Servicos:</span>
-                      <span className="font-medium">{formatCurrency(subtotal)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-destructive">
-                      <span>Divida anterior:</span>
-                      <span className="font-medium">{formatCurrency(Math.abs(clientNetBalance))}</span>
-                    </div>
-                    <div className="border-t pt-1 flex items-center justify-between font-semibold">
-                      <span>Total com divida:</span>
-                      <span>{formatCurrency(subtotal + Math.abs(clientNetBalance))}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card className="bg-muted/50">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Label className="font-semibold">Total a Cobrar:</Label>
-                    <Badge variant="outline" className="cursor-pointer">ℹ</Badge>
-                  </div>
-                  <p className={`text-2xl font-bold ${difference > 0 ? 'text-destructive' : 'text-green-600'}`}>
-                    {formatCurrency(subtotal)}
-                  </p>
-                </CardContent>
-              </Card>
+              </div>
 
               {/* Payment Methods */}
               <Card>
@@ -2045,11 +1981,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
           </Tabs>
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t pt-4 flex-shrink-0">
-          <Button 
-            variant="outline" 
-            className="gap-2" 
+        {/* Avec-style Footer */}
+        <div className="flex items-center justify-between border-t px-6 py-3 flex-shrink-0 bg-background">
+          <Button
+            variant="outline"
+            className="gap-2 text-sm"
             onClick={handleSyncComanda}
             disabled={isUpdating}
           >
@@ -2057,22 +1993,15 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             {isUpdating ? "Atualizando..." : "Atualizar Comanda"}
           </Button>
           <div className="flex items-center gap-2">
-            <div className="text-right mr-4">
-              <div className="text-sm text-muted-foreground">Total a Pagar</div>
-              <div className="text-lg font-semibold">{formatCurrency(subtotal)}</div>
-            </div>
-            <Button variant="outline" size="icon" onClick={handlePrintReceipt}>
+            <Button variant="outline" size="icon" onClick={handlePrintReceipt} title="Imprimir">
               <Printer className="h-4 w-4" />
             </Button>
-            <Button 
-              variant="outline" 
-              size="icon" 
+            <Button
+              variant="outline"
+              size="icon"
               className="text-destructive hover:text-destructive"
-              onClick={() => {
-                if (comanda && onDelete) {
-                  onDelete(comanda);
-                }
-              }}
+              onClick={() => { if (comanda && onDelete) onDelete(comanda); }}
+              title="Excluir"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -2089,7 +2018,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
               </Button>
             ) : (
               <Button
-                className="bg-destructive hover:bg-destructive/90"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={handleFinalizeComanda}
                 disabled={isClosing || !canFinalizeComanda}
                 title={!canFinalizeComanda ? "Você só pode finalizar suas próprias comandas" : undefined}

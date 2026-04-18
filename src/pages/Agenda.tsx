@@ -683,7 +683,7 @@ export default function Agenda() {
                             <div
                               key={`${professional.id}-${time}`}
                               className={cn(
-                                "relative border-r border-border/30 last:border-r-0 h-[36px] transition-colors",
+                                "relative border-r border-border/30 last:border-r-0 h-[30px] transition-colors",
                                 available
                                   ? "hover:bg-primary/5 cursor-pointer"
                                   : "bg-muted/40 cursor-not-allowed"
@@ -708,7 +708,7 @@ export default function Agenda() {
                                             hasOverlap && "border-l-2 border-white/40"
                                           )}
                                           style={{
-                                            height: `${spans * 36 - 2}px`,
+                                            height: `${spans * 30 - 2}px`,
                                             position: "absolute",
                                             left: hasOverlap ? `${(apptIndex / totalOverlapping) * 100}%` : "1px",
                                             width: hasOverlap ? `${(1 / totalOverlapping) * 100 - 1}%` : "calc(100% - 2px)",
@@ -738,6 +738,11 @@ export default function Agenda() {
                                               {appointment.services?.name && (
                                                 <div className="text-[9px] font-medium opacity-90 truncate uppercase leading-tight">
                                                   {appointment.services.name}
+                                                </div>
+                                              )}
+                                              {appointment.created_at && (
+                                                <div className="text-[7px] opacity-60 truncate leading-tight mt-auto">
+                                                  {format(new Date(appointment.created_at), "dd/MM HH:mm")}{appointment.created_by_name ? ` - ${appointment.created_by_name.split(" ")[0]}` : ""}
                                                 </div>
                                               )}
                                             </>

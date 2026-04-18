@@ -104,19 +104,22 @@ export function TopNavigation() {
 
   return (
     <div className="border-b border-border bg-card">
-      <nav className="flex items-center gap-1 px-2 md:px-4 py-2 overflow-x-auto scrollbar-hide md:justify-center">
+      {/* Main Nav — Avec-style icons with text */}
+      <nav className="flex items-center gap-0 px-2 md:px-4 py-1 overflow-x-auto scrollbar-hide md:justify-center">
         {navItems.map((item) => {
           const isActive = activeNavItem?.url === item.url;
           const Icon = item.icon;
-          
+
           return (
             <button
               key={item.url}
               onClick={() => navigate(item.url)}
               className={cn(
-                "flex flex-col items-center gap-1 px-2 md:px-4 py-2 rounded-lg transition-all duration-200 min-w-[60px] md:min-w-[80px] shrink-0",
-                "hover:bg-primary/10 hover:text-primary",
-                isActive && "text-primary border-b-2 border-primary bg-primary/5"
+                "flex flex-col items-center gap-0.5 px-3 md:px-5 py-2 transition-all duration-200 min-w-[56px] md:min-w-[76px] shrink-0 border-b-2",
+                "hover:text-primary",
+                isActive
+                  ? "text-primary border-primary"
+                  : "border-transparent text-muted-foreground"
               )}
             >
               <Icon className={cn(
@@ -134,22 +137,23 @@ export function TopNavigation() {
         })}
       </nav>
 
+      {/* Sub-tabs — Avec-style clean text with underline */}
       {activeNavItem?.subItems && (
-        <div className="flex items-center gap-0 px-2 md:px-4 bg-muted/20 border-t border-border overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-1 px-4 md:px-6 border-t border-border overflow-x-auto scrollbar-hide">
           {activeNavItem.subItems.map((subItem) => {
-            const isSubActive = location.pathname + location.search === subItem.url || 
+            const isSubActive = location.pathname + location.search === subItem.url ||
               (subItem.url.includes("?") && location.pathname + location.search === subItem.url) ||
               (!subItem.url.includes("?") && location.pathname === subItem.url);
-            
+
             return (
               <button
                 key={subItem.url}
                 onClick={() => navigate(subItem.url)}
                 className={cn(
-                  "px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm font-medium transition-colors border-b-2 -mb-[1px] whitespace-nowrap shrink-0",
-                  isSubActive 
-                    ? "border-primary text-primary bg-primary/5" 
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                  "px-3 md:px-4 py-2.5 text-xs md:text-sm font-medium transition-colors border-b-2 -mb-[1px] whitespace-nowrap shrink-0",
+                  isSubActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
                 {subItem.title}

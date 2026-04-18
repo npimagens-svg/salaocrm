@@ -78,6 +78,7 @@ export function ClientFinanceTab({ clientId, clientName }: ClientFinanceTabProps
         <h3 className="text-lg font-semibold">Financeiro de {clientName}</h3>
         <div className="flex items-center gap-2">
           <Button
+            type="button"
             variant="outline"
             className="gap-2 text-green-700 border-green-300 hover:bg-green-50"
             onClick={() => {
@@ -90,6 +91,7 @@ export function ClientFinanceTab({ clientId, clientName }: ClientFinanceTabProps
             Adicionar Credito
           </Button>
           <Button
+            type="button"
             variant="outline"
             className="gap-2 text-red-700 border-red-300 hover:bg-red-50"
             onClick={() => {

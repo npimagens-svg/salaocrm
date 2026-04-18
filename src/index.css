@@ -5,6 +5,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Remove number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* AVEC-inspired Design System for Salon CRM */
 /* Professional blue accent with clean, modern aesthetics */
 
