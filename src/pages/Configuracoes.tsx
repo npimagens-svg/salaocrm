@@ -35,7 +35,7 @@ import {
 import {
   Shield, Users, Settings, MoreHorizontal, Trash2, Loader2, Building2,
   CreditCard, Plus, Pencil, Landmark, ArrowRightLeft, Lock, Cog, UserCog,
-  Save, Calendar, Clock, ToggleLeft, ChevronRight, Home, DollarSign, Percent, Package, Webhook, Globe, Mail, ShieldAlert
+  Save, Calendar, Clock, ToggleLeft, ChevronRight, Home, DollarSign, Percent, Package, Webhook, Globe, Mail, ShieldAlert, Download
 } from "lucide-react";
 import { CommissionSettingsPage } from "@/components/settings/CommissionSettingsPage";
 import { useAuth, AppRole } from "@/contexts/AuthContext";
@@ -60,6 +60,7 @@ import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { WebhookSettingsSection } from "@/components/settings/WebhookSettingsSection";
 import { ApiGatewaySettingsSection } from "@/components/settings/ApiGatewaySettingsSection";
 import { ResendSettingsSection } from "@/components/settings/ResendSettingsSection";
+import { SchemaUpdateCard } from "@/components/settings/SchemaUpdateCard";
 import { AuditLogSection } from "@/components/settings/AuditLogSection";
 
 const SPECIALTIES = [
@@ -591,6 +592,7 @@ export default function Configuracoes() {
     if (path.startsWith("/configuracoes/api")) return "api";
     if (path.startsWith("/configuracoes/email")) return "email";
     if (path.startsWith("/configuracoes/auditoria")) return "auditoria";
+    if (path.startsWith("/configuracoes/atualizacoes")) return "atualizacoes";
     if (path.startsWith("/configuracoes/salao")) return "hub";
     return "hub";
   })();
@@ -743,6 +745,14 @@ export default function Configuracoes() {
                   title="Auditoria"
                   description="Registros de exclusões, alterações e ações críticas do sistema"
                   onClick={() => navigate("/configuracoes/auditoria")}
+                />
+              )}
+              {isMaster && (
+                <SettingsCard
+                  icon={Download}
+                  title="Atualizações do Sistema"
+                  description="Aplique atualizações pendentes do banco de dados após novas versões"
+                  onClick={() => navigate("/configuracoes/atualizacoes")}
                 />
               )}
             </div>
@@ -1223,6 +1233,15 @@ export default function Configuracoes() {
           <>
             <SettingsBreadcrumb label="Auditoria" />
             <AuditLogSection />
+          </>
+        )}
+
+        {/* ===== ATUALIZAÇÕES DO SISTEMA ===== */}
+        {subPage === "atualizacoes" && isMaster && (
+          <>
+            <SettingsBreadcrumb label="Atualizações do Sistema" />
+            <h1 className="text-2xl font-bold tracking-tight">Atualizações do Sistema</h1>
+            <SchemaUpdateCard />
           </>
         )}
       </div>
