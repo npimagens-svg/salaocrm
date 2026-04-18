@@ -82,6 +82,7 @@ export function useClientBalance(clientId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client_balance", clientId, salonId] });
+      queryClient.invalidateQueries({ queryKey: ["client_net_balance", clientId, salonId] });
       toast({ title: "Crédito adicionado com sucesso!" });
     },
     onError: (error: Error) => {
@@ -110,6 +111,7 @@ export function useClientBalance(clientId: string | null) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client_balance", clientId, salonId] });
+      queryClient.invalidateQueries({ queryKey: ["client_net_balance", clientId, salonId] });
       toast({ title: "Dívida registrada com sucesso!" });
     },
     onError: (error: Error) => {
@@ -130,35 +132,75 @@ export function useClientBalance(clientId: string | null) {
 }
 
 /**
- * Lightweight hook to just get the net balance for a client (used in ComandaModal).
+ * Retorna o saldo liquido do cliente (credito - divida).
+ * Considera TRES fontes:
+ * 1. client_balance: lancamentos manuais (credit/debt)
+ * 2. client_debts: dividas de comandas fechadas com saldo faltante (is_paid=false)
+ * 3. client_credits: cashback gerado automaticamente (is_used=false, is_expired=false, nao vencido)
+ *
+ * Valor negativo = cliente deve. Positivo = cliente tem credito.
  */
 export function useClientNetBalance(clientId: string | null) {
   const { salonId } = useAuth();
 
   const query = useQuery({
-    queryKey: ["client_balance", clientId, salonId],
+    queryKey: ["client_net_balance", clientId, salonId],
     queryFn: async () => {
-      if (!clientId || !salonId) return [];
-      const { data, error } = await supabase
-        .from("client_balance")
-        .select("type, amount")
-        .eq("salon_id", salonId)
-        .eq("client_id", clientId);
-      if (error) throw error;
-      return data || [];
+      if (!clientId || !salonId) return { credits: 0, debts: 0 };
+
+      const [balanceRes, debtsRes, creditsRes] = await Promise.all([
+        supabase
+          .from("client_balance")
+          .select("type, amount")
+          .eq("salon_id", salonId)
+          .eq("client_id", clientId),
+        supabase
+          .from("client_debts" as any)
+          .select("debt_amount")
+          .eq("salon_id", salonId)
+          .eq("client_id", clientId)
+          .eq("is_paid", false),
+        supabase
+          .from("client_credits")
+          .select("credit_amount, expires_at")
+          .eq("salon_id", salonId)
+          .eq("client_id", clientId)
+          .eq("is_used", false)
+          .eq("is_expired", false),
+      ]);
+
+      let credits = 0;
+      let debts = 0;
+
+      // client_balance: lancamentos manuais
+      for (const e of (balanceRes.data || [])) {
+        const amount = Number((e as any).amount);
+        if ((e as any).type === "credit") credits += amount;
+        else debts += amount;
+      }
+
+      // client_debts: dividas nao pagas
+      for (const d of (debtsRes.data || [])) {
+        debts += Number((d as any).debt_amount);
+      }
+
+      // client_credits: cashback ativo (nao usado, nao expirado, ainda dentro da validade)
+      const now = new Date();
+      for (const c of (creditsRes.data || [])) {
+        const expires = new Date((c as any).expires_at);
+        if (expires > now) {
+          credits += Number((c as any).credit_amount);
+        }
+      }
+
+      return { credits, debts };
     },
     enabled: !!clientId && !!salonId,
   });
 
-  const entries = query.data ?? [];
-  let netBalance = 0;
-  for (const entry of entries) {
-    if (entry.type === "credit") {
-      netBalance += Number(entry.amount);
-    } else {
-      netBalance -= Number(entry.amount);
-    }
-  }
+  const credits = query.data?.credits ?? 0;
+  const debts = query.data?.debts ?? 0;
+  const netBalance = Math.round((credits - debts) * 100) / 100;
 
   return { netBalance, isLoading: query.isLoading };
 }

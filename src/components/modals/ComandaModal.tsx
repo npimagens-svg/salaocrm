@@ -1280,6 +1280,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       queryClient.invalidateQueries({ queryKey: ["client-credits"] });
       queryClient.invalidateQueries({ queryKey: ["client_comandas"] });
       queryClient.invalidateQueries({ queryKey: ["client_balance"] });
+      queryClient.invalidateQueries({ queryKey: ["client_net_balance"] });
       toast({ title: "Comanda finalizada com sucesso!" });
       onClose();
     } catch (error: any) {
