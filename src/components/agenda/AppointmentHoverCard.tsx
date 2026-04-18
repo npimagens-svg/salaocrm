@@ -125,6 +125,14 @@ export function AppointmentHoverCard({ appointment, allAppointments, children }:
                 <span className="text-muted-foreground">{appointment.notes}</span>
               </p>
             )}
+
+            {appointment.created_at && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold">Criado em:</span>{" "}
+                {format(new Date(appointment.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                {appointment.created_by_name ? ` por ${appointment.created_by_name.split(" ")[0]}` : ""}
+              </p>
+            )}
           </div>
 
           {/* WhatsApp Button */}

@@ -172,6 +172,7 @@ CREATE TABLE public.appointments (
   notes TEXT,
   price NUMERIC,
   group_id UUID,
+  created_by_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -966,7 +967,7 @@ CREATE UNIQUE INDEX idx_comanda_items_unique_appointment ON public.comanda_items
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
 
 -- 10b. SCHEMA VERSION (marca instalacao nova como atualizada)
-INSERT INTO public.system_config (key, value) VALUES ('schema_version', '2') ON CONFLICT (key) DO UPDATE SET value = '2';
+INSERT INTO public.system_config (key, value) VALUES ('schema_version', '3') ON CONFLICT (key) DO UPDATE SET value = '3';
 CREATE POLICY "Avatar images are publicly accessible" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
 CREATE POLICY "Authenticated users can upload avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update avatars" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');

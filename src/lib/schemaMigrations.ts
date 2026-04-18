@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 2;
+export const LATEST_SCHEMA_VERSION = 3;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -32,6 +32,14 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
       `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS loyalty_percent NUMERIC NOT NULL DEFAULT 7;`,
       `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS loyalty_validity_days INTEGER NOT NULL DEFAULT 15;`,
       `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS loyalty_min_purchase NUMERIC NOT NULL DEFAULT 100;`,
+    ],
+  },
+  {
+    version: 3,
+    name: "Auditoria de criacao de agendamentos",
+    description: "Adiciona coluna created_by_name em appointments para registrar quem criou cada agendamento. Exibido no hover card da agenda.",
+    statements: [
+      `ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS created_by_name TEXT;`,
     ],
   },
 ];

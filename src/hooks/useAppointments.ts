@@ -21,6 +21,7 @@ export interface Appointment {
   notes: string | null;
   price: number | null;
   group_id: string | null;
+  created_by_name: string | null;
   created_at: string;
   updated_at: string;
   clients?: { name: string; phone: string | null } | null;
@@ -86,9 +87,16 @@ export function useAppointments(date?: Date) {
   const createMutation = useMutation({
     mutationFn: async (input: AppointmentInput) => {
       if (!salonId) throw new Error("Salão não encontrado");
+      // Fetch creator name
+      let createdByName: string | null = null;
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", currentUser.id).maybeSingle();
+        createdByName = profile?.full_name || null;
+      }
       const { data, error } = await supabase
         .from("appointments")
-        .insert({ ...input, salon_id: salonId })
+        .insert({ ...input, salon_id: salonId, created_by_name: createdByName })
         .select("*")
         .single();
       if (error) throw error;
@@ -130,7 +138,13 @@ export function useAppointments(date?: Date) {
   const createMultipleMutation = useMutation({
     mutationFn: async (input: MultiAppointmentInput) => {
       if (!salonId) throw new Error("Salão não encontrado");
-      const rows = input.services.map((s) => ({ ...s, salon_id: salonId }));
+      let createdByName: string | null = null;
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", currentUser.id).maybeSingle();
+        createdByName = profile?.full_name || null;
+      }
+      const rows = input.services.map((s) => ({ ...s, salon_id: salonId, created_by_name: createdByName }));
       const { data, error } = await supabase
         .from("appointments")
         .insert(rows)
