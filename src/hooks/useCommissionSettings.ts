@@ -19,6 +19,7 @@ export interface CommissionSettings {
   admin_fee_scope: string;
   service_cost_enabled: boolean;
   product_cost_deduction: string;
+  product_sale_deduct_cost: boolean;
   // Recibo
   show_revenue_values: boolean;
   show_costs_values: boolean;
@@ -52,6 +53,7 @@ const DEFAULTS: Omit<CommissionSettings, "id" | "salon_id"> = {
   admin_fee_scope: "services_only",
   service_cost_enabled: true,
   product_cost_deduction: "before_commission",
+  product_sale_deduct_cost: true,
   show_revenue_values: true,
   show_costs_values: true,
   admin_fee_display: "summary",

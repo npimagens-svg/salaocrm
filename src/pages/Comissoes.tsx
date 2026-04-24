@@ -183,7 +183,11 @@ export default function Comissoes() {
         }
 
         const serviceValue = item.total_price || 0;
-        const productCost = commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0;
+        const isProductSale = item.item_type === "product";
+        const ignoreProductCost = isProductSale && !commissionSettings.product_sale_deduct_cost;
+        const productCost = ignoreProductCost
+          ? 0
+          : (commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0);
 
         // Calculate proportional card fee for this item
         const cardFee = calculateItemCardFee(comanda, serviceValue);
@@ -359,7 +363,11 @@ export default function Comissoes() {
         }
 
         const itemTotal = item.total_price || 0;
-        const productCost = commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0;
+        const isProductSale = item.item_type === "product";
+        const ignoreProductCost = isProductSale && !commissionSettings.product_sale_deduct_cost;
+        const productCost = ignoreProductCost
+          ? 0
+          : (commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0);
 
         // Calculate proportional card fee for this item
         const cardFee = calculateItemCardFee(comanda, itemTotal);

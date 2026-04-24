@@ -286,6 +286,28 @@ export function CommissionSettingsPage() {
               </div>
             </RadioGroup>
           </div>
+
+          {/* Custo de Produto Vendido */}
+          <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+            <Label className="font-semibold">Custo de produto vendido (shampoo, condicionador etc.)</Label>
+            <p className="text-xs text-muted-foreground">
+              Quando o profissional vende um produto diretamente, a comissão pode ou não descontar o custo de compra do produto. Isso vale só para itens vendidos, não para produtos consumidos em serviço (tinta, química etc.).
+            </p>
+            <RadioGroup
+              value={form.product_sale_deduct_cost ? "yes" : "no"}
+              onValueChange={(v) => update("product_sale_deduct_cost", v === "yes")}
+              className="flex flex-col gap-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="yes" id="prodsale_yes" />
+                <Label htmlFor="prodsale_yes" className="cursor-pointer">Descontar custo do produto antes da comissão (padrão)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="no" id="prodsale_no" />
+                <Label htmlFor="prodsale_no" className="cursor-pointer">Não descontar custo — comissão aplicada sobre o valor de venda (menos taxa de cartão)</Label>
+              </div>
+            </RadioGroup>
+          </div>
         </CardContent>
       </Card>
 

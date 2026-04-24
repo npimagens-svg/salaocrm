@@ -878,6 +878,7 @@ export type Database = {
           presale_commission_percent: number
           presale_commission_rule: string
           product_cost_deduction: string
+          product_sale_deduct_cost: boolean
           receipt_footer_message: string
           salon_id: string
           service_cost_enabled: boolean
@@ -906,6 +907,7 @@ export type Database = {
           presale_commission_percent?: number
           presale_commission_rule?: string
           product_cost_deduction?: string
+          product_sale_deduct_cost?: boolean
           receipt_footer_message?: string
           salon_id: string
           service_cost_enabled?: boolean
@@ -934,6 +936,7 @@ export type Database = {
           presale_commission_percent?: number
           presale_commission_rule?: string
           product_cost_deduction?: string
+          product_sale_deduct_cost?: boolean
           receipt_footer_message?: string
           salon_id?: string
           service_cost_enabled?: boolean

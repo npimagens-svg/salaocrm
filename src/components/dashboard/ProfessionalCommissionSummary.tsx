@@ -63,7 +63,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
       // Get comanda items for this professional this month
       const { data: items } = await supabase
         .from("comanda_items")
-        .select("total_price, product_cost, service_id, comanda_id")
+        .select("total_price, product_cost, service_id, comanda_id, item_type")
         .eq("professional_id", professionalId)
         .gte("created_at", monthStart)
         .lt("created_at", monthEnd);
@@ -86,7 +86,11 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
 
       items.forEach(item => {
         const itemTotal = item.total_price || 0;
-        const productCost = commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0;
+        const isProductSale = item.item_type === "product";
+        const ignoreProductCost = isProductSale && !commissionSettings.product_sale_deduct_cost;
+        const productCost = ignoreProductCost
+          ? 0
+          : (commissionSettings.service_cost_enabled ? (item.product_cost || 0) : 0);
 
         // Card fee proportional
         const comanda = comandaMap.get(item.comanda_id);

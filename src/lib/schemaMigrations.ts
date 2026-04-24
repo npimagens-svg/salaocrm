@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 5;
+export const LATEST_SCHEMA_VERSION = 6;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -65,6 +65,14 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
       `ALTER TABLE public.client_credits ADD CONSTRAINT client_credits_amount_positive CHECK (credit_amount > 0);`,
       `ALTER TABLE public.client_debts DROP CONSTRAINT IF EXISTS client_debts_amount_positive;`,
       `ALTER TABLE public.client_debts ADD CONSTRAINT client_debts_amount_positive CHECK (debt_amount > 0);`,
+    ],
+  },
+  {
+    version: 6,
+    name: "Custo de produto vendido separado do serviço",
+    description: "Adiciona product_sale_deduct_cost em commission_settings. Quando false, comissão de produto vendido (shampoo, condicionador) não desconta o custo — apenas taxa de cartão. Independente do toggle global de taxa de produto.",
+    statements: [
+      `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS product_sale_deduct_cost BOOLEAN NOT NULL DEFAULT true;`,
     ],
   },
 ];
