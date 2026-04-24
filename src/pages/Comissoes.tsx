@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Loader2, DollarSign, ChevronDown, ChevronUp, FileText, Printer } from "lucide-react";
+import { Search, Loader2, DollarSign, ChevronDown, ChevronUp, FileText, Printer, Gift, MinusCircle, Trash2 } from "lucide-react";
 import { useProfessionals } from "@/hooks/useProfessionals";
 import { useComandas } from "@/hooks/useComandas";
 import { useServices } from "@/hooks/useServices";
@@ -16,6 +16,18 @@ import { useProducts } from "@/hooks/useProducts";
 import { useClients } from "@/hooks/useClients";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useCurrentProfessional } from "@/hooks/useCurrentProfessional";
+import { useCommissionAdjustments, AdjustmentType } from "@/hooks/useCommissionAdjustments";
+import { CommissionAdjustmentModal } from "@/components/modals/CommissionAdjustmentModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,6 +65,11 @@ export default function Comissoes() {
 
   const { professionalId: currentProfessionalId, isProfessionalUser, isLoading: loadingCurrentProfessional } = useCurrentProfessional();
   const { professionals, isLoading: loadingProfessionals } = useProfessionals();
+  const { user, userRole, isMaster } = useAuth();
+  const canManageAdjustments = !isProfessionalUser && (isMaster || userRole === "admin" || userRole === "manager");
+  const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
+  const [adjustmentModalType, setAdjustmentModalType] = useState<AdjustmentType>("bonus");
+  const [adjustmentToDelete, setAdjustmentToDelete] = useState<{ id: string; label: string } | null>(null);
 
   // Auto-select the current professional's ID when they are a professional user
   useEffect(() => {
@@ -66,6 +83,17 @@ export default function Comissoes() {
   const { products, isLoading: loadingProducts } = useProducts();
   const { clients, isLoading: loadingClients } = useClients();
   const { settings: commissionSettings } = useCommissionSettings();
+  const {
+    adjustments: periodAdjustments,
+    createAdjustment,
+    deleteAdjustment,
+    isCreating: isCreatingAdjustment,
+    isDeleting: isDeletingAdjustment,
+  } = useCommissionAdjustments({
+    periodStart: dateStart,
+    periodEnd: dateEnd,
+    professionalId: selectedProfessional !== "all" ? selectedProfessional : undefined,
+  });
 
   // Load per-professional per-service commission overrides
   const { data: profServiceCommissions } = useQuery({
@@ -251,7 +279,14 @@ export default function Comissoes() {
     const totalCardFee = commissionDetails.reduce((sum, item) => sum + item.cardFee, 0);
     const totalNetValue = commissionDetails.reduce((sum, item) => sum + item.netValue, 0);
     const totalCommission = commissionDetails.reduce((sum, item) => sum + item.commissionValue, 0);
-    
+
+    const totalBonus = periodAdjustments
+      .filter(a => a.adjustment_type === "bonus")
+      .reduce((sum, a) => sum + Number(a.amount), 0);
+    const totalDiscount = periodAdjustments
+      .filter(a => a.adjustment_type === "discount")
+      .reduce((sum, a) => sum + Number(a.amount), 0);
+
     return {
       baseRateio: totalServices,
       servicos: totalServices,
@@ -266,10 +301,23 @@ export default function Comissoes() {
       totalRateio: totalCommission,
       totalCaixinhas: 0,
       totalValePresente: 0,
-      descontosBonus: 0,
-      totalPagar: totalCommission,
+      totalBonus,
+      totalDiscount,
+      descontosBonus: totalBonus - totalDiscount,
+      totalPagar: totalCommission + totalBonus - totalDiscount,
     };
-  }, [commissionDetails]);
+  }, [commissionDetails, periodAdjustments]);
+
+  const openAdjustmentModal = (type: AdjustmentType) => {
+    setAdjustmentModalType(type);
+    setAdjustmentModalOpen(true);
+  };
+
+  const handleConfirmDeleteAdjustment = () => {
+    if (!adjustmentToDelete) return;
+    deleteAdjustment(adjustmentToDelete.id);
+    setAdjustmentToDelete(null);
+  };
 
   // Group commission details by date for mobile view
   const dailyCommissions = useMemo(() => {
@@ -471,20 +519,42 @@ export default function Comissoes() {
       },
     });
 
-    // Summary
+    // Ajustes do período (bônus e descontos)
     const finalY = (doc as any).lastAutoTable?.finalY || 150;
-    const summaryY = finalY + 10;
+    let cursorY = finalY + 10;
+    if (periodAdjustments.length > 0) {
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Ajustes do período", "Data", "Tipo", "Motivo", "Valor"]],
+        body: periodAdjustments.map(a => [
+          "",
+          format(new Date(a.adjustment_date + "T00:00:00"), "dd/MM/yyyy"),
+          a.adjustment_type === "bonus" ? "Bônus" : "Desconto",
+          a.description || "-",
+          `${a.adjustment_type === "bonus" ? "+" : "-"}${formatCurrency(Number(a.amount))}`,
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [234, 88, 12] },
+        columnStyles: { 4: { halign: "right" } },
+      });
+      cursorY = (doc as any).lastAutoTable?.finalY || cursorY + 20;
+    }
+
+    // Summary
+    const summaryY = cursorY + 10;
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.text("Resumo", 14, summaryY);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    const lines = [
+    const lines: [string, string][] = [
       [`Base de Rateio (Serviços):`, formatCurrency(professionalTotals.baseRateio)],
-      ...(professionalTotals.productCost > 0 ? [[`(-) Custo de Produtos:`, `-${formatCurrency(professionalTotals.productCost)}`]] : []),
-      ...(professionalTotals.cardFee > 0 ? [[`(-) Taxa de Cartão:`, `-${formatCurrency(professionalTotals.cardFee)}`]] : []),
+      ...(professionalTotals.productCost > 0 ? [[`(-) Custo de Produtos:`, `-${formatCurrency(professionalTotals.productCost)}`]] as [string, string][] : []),
+      ...(professionalTotals.cardFee > 0 ? [[`(-) Taxa de Cartão:`, `-${formatCurrency(professionalTotals.cardFee)}`]] as [string, string][] : []),
       [`Valor Líquido:`, formatCurrency(professionalTotals.netValue)],
       [`Comissão:`, formatCurrency(professionalTotals.totalRateio)],
+      ...(professionalTotals.totalBonus > 0 ? [[`(+) Bônus:`, `+${formatCurrency(professionalTotals.totalBonus)}`]] as [string, string][] : []),
+      ...(professionalTotals.totalDiscount > 0 ? [[`(-) Descontos:`, `-${formatCurrency(professionalTotals.totalDiscount)}`]] as [string, string][] : []),
     ];
     lines.forEach(([label, value], i) => {
       doc.text(label, 14, summaryY + 7 + i * 5);
@@ -627,11 +697,33 @@ export default function Comissoes() {
               </Card>
 
               {/* Report Actions */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-muted-foreground">
                   Relatório de comissão
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {canManageAdjustments && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openAdjustmentModal("bonus")}
+                        className="text-green-700 border-green-300 hover:bg-green-50 hover:text-green-800"
+                      >
+                        <Gift className="h-4 w-4 mr-2" />
+                        + Bônus
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openAdjustmentModal("discount")}
+                        className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                      >
+                        <MinusCircle className="h-4 w-4 mr-2" />
+                        + Desconto
+                      </Button>
+                    </>
+                  )}
                   <Button variant="outline" size="sm" onClick={handlePrint}>
                     <Printer className="h-4 w-4 mr-2" />
                     Imprimir
@@ -756,6 +848,64 @@ export default function Comissoes() {
                   ))
                 )}
               </div>
+
+              {/* Ajustes do período (bônus e descontos) */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Ajustes do período</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {periodAdjustments.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      Nenhum bônus ou desconto registrado neste período.
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {periodAdjustments.map(adj => {
+                        const isBonus = adj.adjustment_type === "bonus";
+                        return (
+                          <div
+                            key={adj.id}
+                            className="flex items-center gap-3 p-3 sm:p-4"
+                          >
+                            <div className={`rounded-full p-2 ${isBonus ? "bg-green-100 text-green-700" : "bg-destructive/10 text-destructive"}`}>
+                              {isBonus ? <Gift className="h-4 w-4" /> : <MinusCircle className="h-4 w-4" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {adj.description || (isBonus ? "Bônus" : "Desconto")}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(adj.adjustment_date + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                                {adj.created_by_name ? ` • ${adj.created_by_name}` : ""}
+                              </p>
+                            </div>
+                            <div className={`text-sm font-semibold ${isBonus ? "text-green-700" : "text-destructive"}`}>
+                              {isBonus ? "+" : "-"}{formatCurrency(Number(adj.amount))}
+                            </div>
+                            {canManageAdjustments && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() =>
+                                  setAdjustmentToDelete({
+                                    id: adj.id,
+                                    label: `${isBonus ? "bônus" : "desconto"} de ${formatCurrency(Number(adj.amount))}`,
+                                  })
+                                }
+                                aria-label="Remover ajuste"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
             {/* Summary Card */}
@@ -838,9 +988,15 @@ export default function Comissoes() {
                       <span>{formatCurrency(professionalTotals.totalValePresente)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Descontos e Bônus:</span>
-                      <span className={professionalTotals.descontosBonus < 0 ? "text-destructive" : ""}>
-                        {formatCurrency(professionalTotals.descontosBonus)}
+                      <span className="text-muted-foreground">Bônus:</span>
+                      <span className={professionalTotals.totalBonus > 0 ? "text-green-700 font-medium" : ""}>
+                        {professionalTotals.totalBonus > 0 ? "+" : ""}{formatCurrency(professionalTotals.totalBonus)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Descontos:</span>
+                      <span className={professionalTotals.totalDiscount > 0 ? "text-destructive font-medium" : ""}>
+                        {professionalTotals.totalDiscount > 0 ? "-" : ""}{formatCurrency(professionalTotals.totalDiscount)}
                       </span>
                     </div>
                   </div>
@@ -953,6 +1109,46 @@ export default function Comissoes() {
           </div>
         )}
       </div>
+
+      {canManageAdjustments && selectedProfessional !== "all" && selectedProfessionalData && (
+        <CommissionAdjustmentModal
+          open={adjustmentModalOpen}
+          onOpenChange={setAdjustmentModalOpen}
+          type={adjustmentModalType}
+          professionalId={selectedProfessional}
+          professionalName={selectedProfessionalData.name}
+          createdByName={user?.email || null}
+          onSubmit={createAdjustment}
+          isSubmitting={isCreatingAdjustment}
+        />
+      )}
+
+      <AlertDialog
+        open={!!adjustmentToDelete}
+        onOpenChange={(open) => { if (!open) setAdjustmentToDelete(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Remover ajuste?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover o {adjustmentToDelete?.label}? O total a pagar será recalculado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingAdjustment}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleConfirmDeleteAdjustment(); }}
+              disabled={isDeletingAdjustment}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingAdjustment ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayoutNew>
   );
 }

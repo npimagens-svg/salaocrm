@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 6;
+export const LATEST_SCHEMA_VERSION = 7;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -73,6 +73,33 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
     description: "Adiciona product_sale_deduct_cost em commission_settings. Quando false, comissão de produto vendido (shampoo, condicionador) não desconta o custo — apenas taxa de cartão. Independente do toggle global de taxa de produto.",
     statements: [
       `ALTER TABLE public.commission_settings ADD COLUMN IF NOT EXISTS product_sale_deduct_cost BOOLEAN NOT NULL DEFAULT true;`,
+    ],
+  },
+  {
+    version: 7,
+    name: "Ajustes manuais na comissão (bônus e descontos)",
+    description: "Cria a tabela commission_adjustments para registrar bônus (+) e descontos (-) que entram no total da comissão do profissional no período, fora do fluxo da comanda.",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS public.commission_adjustments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        salon_id UUID NOT NULL REFERENCES public.salons(id) ON DELETE CASCADE,
+        professional_id UUID NOT NULL REFERENCES public.professionals(id) ON DELETE CASCADE,
+        adjustment_date DATE NOT NULL,
+        adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('bonus','discount')),
+        amount NUMERIC NOT NULL CHECK (amount > 0),
+        description TEXT NOT NULL DEFAULT '',
+        created_by_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_adjustments_professional_date ON public.commission_adjustments (professional_id, adjustment_date);`,
+      `CREATE INDEX IF NOT EXISTS idx_commission_adjustments_salon_date ON public.commission_adjustments (salon_id, adjustment_date);`,
+      `ALTER TABLE public.commission_adjustments ENABLE ROW LEVEL SECURITY;`,
+      `DROP POLICY IF EXISTS "Users can view commission_adjustments in their salon" ON public.commission_adjustments;`,
+      `CREATE POLICY "Users can view commission_adjustments in their salon" ON public.commission_adjustments FOR SELECT USING (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));`,
+      `DROP POLICY IF EXISTS "Users can insert commission_adjustments in their salon" ON public.commission_adjustments;`,
+      `CREATE POLICY "Users can insert commission_adjustments in their salon" ON public.commission_adjustments FOR INSERT WITH CHECK (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));`,
+      `DROP POLICY IF EXISTS "Users can delete commission_adjustments in their salon" ON public.commission_adjustments;`,
+      `CREATE POLICY "Users can delete commission_adjustments in their salon" ON public.commission_adjustments FOR DELETE USING (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));`,
     ],
   },
 ];

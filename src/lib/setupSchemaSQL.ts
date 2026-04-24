@@ -530,6 +530,24 @@ CREATE TABLE public.commission_settings (
   UNIQUE(salon_id)
 );
 
+CREATE TABLE public.commission_adjustments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  salon_id UUID NOT NULL REFERENCES public.salons(id) ON DELETE CASCADE,
+  professional_id UUID NOT NULL REFERENCES public.professionals(id) ON DELETE CASCADE,
+  adjustment_date DATE NOT NULL,
+  adjustment_type TEXT NOT NULL CHECK (adjustment_type IN ('bonus','discount')),
+  amount NUMERIC NOT NULL CHECK (amount > 0),
+  description TEXT NOT NULL DEFAULT '',
+  created_by_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_commission_adjustments_professional_date ON public.commission_adjustments (professional_id, adjustment_date);
+CREATE INDEX idx_commission_adjustments_salon_date ON public.commission_adjustments (salon_id, adjustment_date);
+ALTER TABLE public.commission_adjustments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view commission_adjustments in their salon" ON public.commission_adjustments FOR SELECT USING (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));
+CREATE POLICY "Users can insert commission_adjustments in their salon" ON public.commission_adjustments FOR INSERT WITH CHECK (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));
+CREATE POLICY "Users can delete commission_adjustments in their salon" ON public.commission_adjustments FOR DELETE USING (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));
+
 CREATE TABLE public.client_credits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID NOT NULL REFERENCES public.salons(id) ON DELETE CASCADE,
@@ -968,8 +986,8 @@ CREATE UNIQUE INDEX idx_comanda_items_unique_appointment ON public.comanda_items
 -- 10. STORAGE BUCKET para avatares
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
 
--- 10b. SCHEMA VERSION (marca instalacao nova como atualizada)
-INSERT INTO public.system_config (key, value) VALUES ('schema_version', '6') ON CONFLICT (key) DO UPDATE SET value = '6';
+-- 11. SCHEMA VERSION (marca instalacao nova como atualizada)
+INSERT INTO public.system_config (key, value) VALUES ('schema_version', '7') ON CONFLICT (key) DO UPDATE SET value = '7';
 CREATE POLICY "Avatar images are publicly accessible" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
 CREATE POLICY "Authenticated users can upload avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update avatars" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');
