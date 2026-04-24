@@ -18,6 +18,16 @@ import { useSchedulingSettings } from "@/hooks/useSchedulingSettings";
 import { useAllProfessionalSchedules } from "@/hooks/useAllProfessionalSchedules";
 import { AppointmentModal } from "@/components/modals/AppointmentModal";
 import { BlockTimeModal, BlockTimeData } from "@/components/modals/BlockTimeModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AppointmentHoverCard } from "@/components/agenda/AppointmentHoverCard";
 import { ClientModal } from "@/components/modals/ClientModal";
 import { format } from "date-fns";
@@ -69,6 +79,8 @@ export default function Agenda() {
   const [clientModalOpen, setClientModalOpen] = useState(false);
   const [pendingClientName, setPendingClientName] = useState("");
   const [isBlocking, setIsBlocking] = useState(false);
+  const [blockToDelete, setBlockToDelete] = useState<Appointment | null>(null);
+  const [isDeletingBlock, setIsDeletingBlock] = useState(false);
   const [maxColumns, setMaxColumns] = useState(10);
   const [expandCategories, setExpandCategories] = useState(false);
   const [mobileDatePickerOpen, setMobileDatePickerOpen] = useState(false);
@@ -315,6 +327,29 @@ export default function Agenda() {
       });
     } finally {
       setIsBlocking(false);
+    }
+  };
+
+  const handleDeleteBlock = async () => {
+    if (!blockToDelete) return;
+    setIsDeletingBlock(true);
+    try {
+      const { error } = await supabase
+        .from("appointments")
+        .delete()
+        .eq("id", blockToDelete.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["appointments", salonId] });
+      toast({ title: "Bloqueio removido com sucesso!" });
+      setBlockToDelete(null);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover bloqueio",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingBlock(false);
     }
   };
 
@@ -716,7 +751,9 @@ export default function Agenda() {
                                           }}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (!isBlocked) {
+                                            if (isBlocked) {
+                                              setBlockToDelete(appointment);
+                                            } else {
                                               handleSlotClick(professional.id, time, appointment);
                                             }
                                           }}
@@ -809,6 +846,53 @@ export default function Agenda() {
         initialName={pendingClientName}
         client={viewClient || undefined}
       />
+
+      <AlertDialog
+        open={!!blockToDelete}
+        onOpenChange={(open) => { if (!open) setBlockToDelete(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-destructive" />
+              Remover bloqueio?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {blockToDelete && (
+                  <div className="text-sm text-foreground bg-muted/40 rounded-md p-3">
+                    <p>
+                      <span className="font-semibold">Profissional:</span>{" "}
+                      {professionals.find(p => p.id === blockToDelete.professional_id)?.name || "—"}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Data e hora:</span>{" "}
+                      {format(new Date(blockToDelete.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                    <p>
+                      <span className="font-semibold">Motivo:</span>{" "}
+                      {blockToDelete.notes?.replace("🔒 BLOQUEADO: ", "") || "—"}
+                    </p>
+                  </div>
+                )}
+                <span className="block text-sm text-muted-foreground">
+                  O horário voltará a ficar disponível para novos agendamentos.
+                </span>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingBlock}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDeleteBlock(); }}
+              disabled={isDeletingBlock}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingBlock ? "Removendo..." : "Remover bloqueio"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayoutNew>
   );
 }

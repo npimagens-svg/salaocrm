@@ -6,6 +6,7 @@ import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useServices } from "@/hooks/useServices";
+import { useProducts } from "@/hooks/useProducts";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useMemo } from "react";
 
@@ -22,6 +23,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
   const { salonId } = useAuth();
   const navigate = useNavigate();
   const { services } = useServices();
+  const { products } = useProducts();
   const { commissionSettings } = useCommissionSettings();
 
   const serviceMap = useMemo(() => {
@@ -29,6 +31,12 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
     services.forEach(s => map.set(s.id, s.commission_percent || 0));
     return map;
   }, [services]);
+
+  const productMap = useMemo(() => {
+    const map = new Map<string, number>();
+    products.forEach(p => map.set(p.id, Number(p.commission_percent) || 0));
+    return map;
+  }, [products]);
 
   // Load per-professional per-service commission overrides
   const { data: profServiceCommissions } = useQuery({
@@ -63,7 +71,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
       // Get comanda items for this professional this month
       const { data: items } = await supabase
         .from("comanda_items")
-        .select("total_price, product_cost, service_id, comanda_id, item_type")
+        .select("total_price, product_cost, service_id, product_id, comanda_id, item_type")
         .eq("professional_id", professionalId)
         .gte("created_at", monthStart)
         .lt("created_at", monthEnd);
@@ -104,13 +112,18 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
           }
         }
 
-        // Priority: professional_service_commissions > services.commission_percent > professionals.commission_percent
+        // Priority: produto usa products.commission_percent (nao herda do profissional);
+        // servico: professional_service_commissions > services.commission_percent > professionals.commission_percent
         let itemCommissionPercent = commissionPercent;
-        if (item.service_id && serviceMap.has(item.service_id)) {
-          itemCommissionPercent = serviceMap.get(item.service_id)! || itemCommissionPercent;
-        }
-        if (item.service_id && profCommMap.has(item.service_id)) {
-          itemCommissionPercent = profCommMap.get(item.service_id)!;
+        if (isProductSale && item.product_id && productMap.has(item.product_id)) {
+          itemCommissionPercent = productMap.get(item.product_id)!;
+        } else {
+          if (item.service_id && serviceMap.has(item.service_id)) {
+            itemCommissionPercent = serviceMap.get(item.service_id)! || itemCommissionPercent;
+          }
+          if (item.service_id && profCommMap.has(item.service_id)) {
+            itemCommissionPercent = profCommMap.get(item.service_id)!;
+          }
         }
 
         let commission: number;
