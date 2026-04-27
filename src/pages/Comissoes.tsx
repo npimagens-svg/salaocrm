@@ -373,6 +373,15 @@ export default function Comissoes() {
       itemCount: number;
     }>();
 
+    // Pre-calcular ajustes (bonus/desconto) por profissional no periodo
+    const adjustmentsByProf = new Map<string, { bonus: number; discount: number }>();
+    periodAdjustments.forEach(adj => {
+      const cur = adjustmentsByProf.get(adj.professional_id) || { bonus: 0, discount: 0 };
+      if (adj.adjustment_type === "bonus") cur.bonus += Number(adj.amount);
+      else cur.discount += Number(adj.amount);
+      adjustmentsByProf.set(adj.professional_id, cur);
+    });
+
     professionals.forEach(prof => {
       commissionMap.set(prof.id, {
         professional: prof,
@@ -454,8 +463,19 @@ export default function Comissoes() {
       });
     });
 
-    return Array.from(commissionMap.values()).filter(c => c.itemCount > 0);
-  }, [professionals, filteredComandas, serviceMap, productMap, profServiceCommMap, commissionSettings]);
+    // Adicionar bonus/desconto de cada profissional ao totalToPay
+    return Array.from(commissionMap.values())
+      .map(c => {
+        const adj = adjustmentsByProf.get(c.professional.id) || { bonus: 0, discount: 0 };
+        return {
+          ...c,
+          bonus: adj.bonus,
+          discount: adj.discount,
+          totalToPay: c.commission + adj.bonus - adj.discount,
+        };
+      })
+      .filter(c => c.itemCount > 0 || c.bonus > 0 || c.discount > 0);
+  }, [professionals, filteredComandas, serviceMap, productMap, profServiceCommMap, commissionSettings, periodAdjustments]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -857,63 +877,6 @@ export default function Comissoes() {
                 )}
               </div>
 
-              {/* Ajustes do período (bônus e descontos) */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Ajustes do período</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {periodAdjustments.length === 0 ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      Nenhum bônus ou desconto registrado neste período.
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {periodAdjustments.map(adj => {
-                        const isBonus = adj.adjustment_type === "bonus";
-                        return (
-                          <div
-                            key={adj.id}
-                            className="flex items-center gap-3 p-3 sm:p-4"
-                          >
-                            <div className={`rounded-full p-2 ${isBonus ? "bg-green-100 text-green-700" : "bg-destructive/10 text-destructive"}`}>
-                              {isBonus ? <Gift className="h-4 w-4" /> : <MinusCircle className="h-4 w-4" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {adj.description || (isBonus ? "Bônus" : "Desconto")}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {format(new Date(adj.adjustment_date + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                                {adj.created_by_name ? ` • ${adj.created_by_name}` : ""}
-                              </p>
-                            </div>
-                            <div className={`text-sm font-semibold ${isBonus ? "text-green-700" : "text-destructive"}`}>
-                              {isBonus ? "+" : "-"}{formatCurrency(Number(adj.amount))}
-                            </div>
-                            {canManageAdjustments && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() =>
-                                  setAdjustmentToDelete({
-                                    id: adj.id,
-                                    label: `${isBonus ? "bônus" : "desconto"} de ${formatCurrency(Number(adj.amount))}`,
-                                  })
-                                }
-                                aria-label="Remover ajuste"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             </div>
 
             {/* Summary Card */}
@@ -985,28 +948,90 @@ export default function Comissoes() {
                     </div>
                   </div>
 
-                  {/* Extras */}
-                  <div className="pb-3 border-b space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Caixinhas:</span>
-                      <span>{formatCurrency(professionalTotals.totalCaixinhas)}</span>
+                  {/* Ajustes (Bônus e Descontos) com motivo inline */}
+                  <div className="pb-3 border-b space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Ajustes do período</span>
+                      {canManageAdjustments && (
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-green-700 hover:bg-green-50"
+                            onClick={() => openAdjustmentModal("bonus")}
+                            aria-label="Adicionar bônus"
+                            title="Adicionar bônus"
+                          >
+                            <Gift className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                            onClick={() => openAdjustmentModal("discount")}
+                            aria-label="Adicionar desconto"
+                            title="Adicionar desconto"
+                          >
+                            <MinusCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total Vale-Presente:</span>
-                      <span>{formatCurrency(professionalTotals.totalValePresente)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Bônus:</span>
-                      <span className={professionalTotals.totalBonus > 0 ? "text-green-700 font-medium" : ""}>
-                        {professionalTotals.totalBonus > 0 ? "+" : ""}{formatCurrency(professionalTotals.totalBonus)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Descontos:</span>
-                      <span className={professionalTotals.totalDiscount > 0 ? "text-destructive font-medium" : ""}>
-                        {professionalTotals.totalDiscount > 0 ? "-" : ""}{formatCurrency(professionalTotals.totalDiscount)}
-                      </span>
-                    </div>
+
+                    {periodAdjustments.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">
+                        Nenhum bônus ou desconto registrado.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {periodAdjustments.map(adj => {
+                          const isBonus = adj.adjustment_type === "bonus";
+                          return (
+                            <div key={adj.id} className="flex items-start gap-2 text-xs">
+                              <span className={`shrink-0 ${isBonus ? "text-green-700" : "text-destructive"}`}>
+                                {isBonus ? <Gift className="h-3.5 w-3.5" /> : <MinusCircle className="h-3.5 w-3.5" />}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="truncate font-medium" title={adj.description}>
+                                  {adj.description || (isBonus ? "Bônus" : "Desconto")}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {format(new Date(adj.adjustment_date + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 font-semibold ${isBonus ? "text-green-700" : "text-destructive"}`}>
+                                {isBonus ? "+" : "-"}{formatCurrency(Number(adj.amount))}
+                              </span>
+                              {canManageAdjustments && (
+                                <button
+                                  type="button"
+                                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() =>
+                                    setAdjustmentToDelete({
+                                      id: adj.id,
+                                      label: `${isBonus ? "bônus" : "desconto"} de ${formatCurrency(Number(adj.amount))}`,
+                                    })
+                                  }
+                                  aria-label="Remover ajuste"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {(professionalTotals.totalBonus > 0 || professionalTotals.totalDiscount > 0) && (
+                      <div className="flex justify-between text-sm pt-2 border-t border-dashed">
+                        <span className="text-muted-foreground">Líquido dos ajustes:</span>
+                        <span className={professionalTotals.descontosBonus > 0 ? "text-green-700 font-semibold" : professionalTotals.descontosBonus < 0 ? "text-destructive font-semibold" : ""}>
+                          {professionalTotals.descontosBonus > 0 ? "+" : ""}{formatCurrency(professionalTotals.descontosBonus)}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Total */}
@@ -1046,40 +1071,49 @@ export default function Comissoes() {
                       <TableRow>
                         <TableHead>Profissional</TableHead>
                         <TableHead>Cargo</TableHead>
-                        <TableHead className="text-right">Serviços</TableHead>
+                        <TableHead className="text-right">Serv.</TableHead>
                         <TableHead className="text-right">Total Serviços</TableHead>
                         <TableHead className="text-right">Comissão</TableHead>
+                        <TableHead className="text-right">Ajustes</TableHead>
+                        <TableHead className="text-right">Total a pagar</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {professionalCommissions.map((item) => (
-                        <TableRow 
-                          key={item.professional.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setSelectedProfessional(item.professional.id)}
-                        >
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={item.professional.avatar_url || undefined} />
-                                <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                  {getInitials(item.professional.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="font-medium">{item.professional.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{item.professional.role || "-"}</TableCell>
-                          <TableCell className="text-right">{item.itemCount}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.totalServices)}</TableCell>
-                          <TableCell className="text-right font-bold text-primary">
-                            {formatCurrency(item.totalToPay)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {professionalCommissions.map((item) => {
+                        const ajusteLiquido = (item.bonus || 0) - (item.discount || 0);
+                        return (
+                          <TableRow
+                            key={item.professional.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setSelectedProfessional(item.professional.id)}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={item.professional.avatar_url || undefined} />
+                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                    {getInitials(item.professional.name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="font-medium">{item.professional.name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{item.professional.role || "-"}</TableCell>
+                            <TableCell className="text-right">{item.itemCount}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.totalServices)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.commission)}</TableCell>
+                            <TableCell className={`text-right ${ajusteLiquido > 0 ? "text-green-700" : ajusteLiquido < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                              {ajusteLiquido === 0 ? "-" : (ajusteLiquido > 0 ? "+" : "") + formatCurrency(ajusteLiquido)}
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-primary">
+                              {formatCurrency(item.totalToPay)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                       {professionalCommissions.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                             Nenhum profissional com comissões no período
                           </TableCell>
                         </TableRow>
