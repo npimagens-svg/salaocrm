@@ -197,26 +197,16 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="commission">Comissão (%)</Label>
-                  <Input
-                    id="commission"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={formData.commission_percent}
-                    onChange={(e) => setFormData({ ...formData, commission_percent: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Categoria</Label>
-                  <Input
-                    id="category"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="category">Categoria</Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  A comissão é definida na ficha de cada profissional, não no serviço.
+                </p>
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="is_active">Serviço Ativo</Label>
@@ -276,10 +266,6 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
                   <div className="flex justify-between text-sm">
                     <span>Valor Líquido:</span>
                     <span className="font-medium">{formatCurrency(formData.price - totalProductCost)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Base para Comissão ({formData.commission_percent}%):</span>
-                    <span>{formatCurrency((formData.price - totalProductCost) * (formData.commission_percent / 100))}</span>
                   </div>
                 </div>
               )}

@@ -71,7 +71,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
       // Get comanda items for this professional this month
       const { data: items } = await supabase
         .from("comanda_items")
-        .select("total_price, product_cost, service_id, product_id, comanda_id, item_type")
+        .select("total_price, product_cost, service_id, product_id, comanda_id, item_type, commission_percent_override")
         .eq("professional_id", professionalId)
         .gte("created_at", monthStart)
         .lt("created_at", monthEnd);
@@ -112,18 +112,16 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
           }
         }
 
-        // Priority: produto usa products.commission_percent (nao herda do profissional);
-        // servico: professional_service_commissions > services.commission_percent > professionals.commission_percent
+        // Hierarquia v9: override item > override prof×svc > default profissional
+        // Produto vendido: products.commission_percent (excecao, nao herda do profissional)
         let itemCommissionPercent = commissionPercent;
         if (isProductSale && item.product_id && productMap.has(item.product_id)) {
           itemCommissionPercent = productMap.get(item.product_id)!;
-        } else {
-          if (item.service_id && serviceMap.has(item.service_id)) {
-            itemCommissionPercent = serviceMap.get(item.service_id)! || itemCommissionPercent;
-          }
-          if (item.service_id && profCommMap.has(item.service_id)) {
-            itemCommissionPercent = profCommMap.get(item.service_id)!;
-          }
+        } else if (item.service_id && profCommMap.has(item.service_id)) {
+          itemCommissionPercent = profCommMap.get(item.service_id)!;
+        }
+        if ((item as any).commission_percent_override !== null && (item as any).commission_percent_override !== undefined) {
+          itemCommissionPercent = Number((item as any).commission_percent_override);
         }
 
         let commission: number;

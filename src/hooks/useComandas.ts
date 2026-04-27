@@ -51,6 +51,7 @@ export interface ComandaItem {
   unit_price: number;
   total_price: number;
   product_cost: number;
+  commission_percent_override: number | null;
   created_at: string;
   professional?: {
     id: string;
@@ -109,6 +110,7 @@ export function useComandas() {
             product_id,
             professional_id,
             product_cost,
+            commission_percent_override,
             professional:professionals(id, name)
           ),
           payments(

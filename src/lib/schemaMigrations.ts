@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 8;
+export const LATEST_SCHEMA_VERSION = 9;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -111,6 +111,15 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
       `DROP TRIGGER IF EXISTS trg_uppercase_client_name ON public.clients;`,
       `CREATE TRIGGER trg_uppercase_client_name BEFORE INSERT OR UPDATE OF name ON public.clients FOR EACH ROW EXECUTE FUNCTION public.uppercase_client_name();`,
       `UPDATE public.clients SET name = UPPER(name) WHERE name <> UPPER(name);`,
+    ],
+  },
+  {
+    version: 9,
+    name: "Override de comissão por item da comanda",
+    description: "Adiciona comanda_items.commission_percent_override para permitir editar a comissão de um item especifico na hora de fechar a comanda. NULL = usa a regra automatica (override prof x svc → default profissional).",
+    statements: [
+      `ALTER TABLE public.comanda_items ADD COLUMN IF NOT EXISTS commission_percent_override NUMERIC NULL;`,
+      `ALTER TABLE public.comanda_items ADD CONSTRAINT comanda_items_commission_override_range CHECK (commission_percent_override IS NULL OR (commission_percent_override >= 0 AND commission_percent_override <= 100));`,
     ],
   },
 ];

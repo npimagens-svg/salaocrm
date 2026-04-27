@@ -167,7 +167,6 @@ export default function Servicos() {
                   <span className="flex-1">Serviço</span>
                   <span className="w-16 text-center">Duração</span>
                   <span className="w-24 text-right">Preço</span>
-                  <span className="w-16 text-right">Comissão</span>
                   <span className="w-8"></span>
                 </div>
                 <div className="divide-y">
@@ -191,9 +190,6 @@ export default function Servicos() {
                           </span>
                           <span className="font-medium w-24 text-right">
                             R$ {Number(service.price).toFixed(2)}
-                          </span>
-                          <span className="text-muted-foreground w-16 text-right">
-                            {Number(service.commission_percent) || 0}%
                           </span>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

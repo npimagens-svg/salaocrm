@@ -271,6 +271,7 @@ CREATE TABLE public.comanda_items (
   total_price NUMERIC NOT NULL,
   item_type TEXT NOT NULL DEFAULT 'service',
   product_cost NUMERIC DEFAULT 0,
+  commission_percent_override NUMERIC NULL CHECK (commission_percent_override IS NULL OR (commission_percent_override >= 0 AND commission_percent_override <= 100)),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -992,7 +993,7 @@ DROP TRIGGER IF EXISTS trg_uppercase_client_name ON public.clients;
 CREATE TRIGGER trg_uppercase_client_name BEFORE INSERT OR UPDATE OF name ON public.clients FOR EACH ROW EXECUTE FUNCTION public.uppercase_client_name();
 
 -- 11. SCHEMA VERSION (marca instalacao nova como atualizada)
-INSERT INTO public.system_config (key, value) VALUES ('schema_version', '8') ON CONFLICT (key) DO UPDATE SET value = '8';
+INSERT INTO public.system_config (key, value) VALUES ('schema_version', '9') ON CONFLICT (key) DO UPDATE SET value = '9';
 CREATE POLICY "Avatar images are publicly accessible" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
 CREATE POLICY "Authenticated users can upload avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update avatars" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');

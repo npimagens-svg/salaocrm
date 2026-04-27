@@ -182,32 +182,37 @@ export default function Comissoes() {
         const profId = item.professional_id || comanda.professional_id;
         if (profId !== selectedProfessional) return;
 
-        // Get service info and commission percent
-        // Priority: package_commission > professional_service_commissions > services.commission_percent > professionals.commission_percent
-        // Produtos vendidos: usa products.commission_percent (nao herda do profissional)
+        // Get service info and commission percent.
+        // Nova hierarquia (v9):
+        //   1. comanda_items.commission_percent_override (se setado pelo operador)
+        //   2. professional_service_commissions[prof, svc] (override permanente)
+        //   3. professionals.commission_percent (default do profissional)
+        //   4. (excecao) Pacote → professionals.package_commission_percent
+        //   5. (excecao) Produto vendido → products.commission_percent (nao herda do profissional)
         let serviceName = item.description || "Serviço";
-        let commissionPercent = selectedProf.commission_percent || 0;
+        let commissionPercent = Number(selectedProf.commission_percent) || 0;
 
-        // Package items use package_commission_percent from the professional
         if (item.item_type === "package") {
-          commissionPercent = selectedProf.package_commission_percent || commissionPercent;
+          commissionPercent = Number(selectedProf.package_commission_percent) || 0;
         } else if (item.item_type === "product" && item.product_id && productMap.has(item.product_id)) {
           const productInfo = productMap.get(item.product_id)!;
           serviceName = productInfo.name;
-          // Produto usa SOMENTE o percentual cadastrado nele (pode ser 0)
           commissionPercent = productInfo.commission_percent;
         } else if (item.service_id && serviceMap.has(item.service_id)) {
-          const serviceInfo = serviceMap.get(item.service_id)!;
-          serviceName = serviceInfo.name;
-          commissionPercent = serviceInfo.commission_percent || commissionPercent;
+          serviceName = serviceMap.get(item.service_id)!.name;
         }
 
-        // Override with per-professional per-service commission if configured (not for packages/products)
+        // Override permanente prof × serviço (regra 2)
         if (item.item_type === "service" && item.service_id && profId) {
           const profCommKey = `${profId}:${item.service_id}`;
           if (profServiceCommMap.has(profCommKey)) {
             commissionPercent = profServiceCommMap.get(profCommKey)!;
           }
+        }
+
+        // Override por item da comanda (regra 1 — prioridade maxima)
+        if (item.commission_percent_override !== null && item.commission_percent_override !== undefined) {
+          commissionPercent = Number(item.commission_percent_override);
         }
 
         const serviceValue = item.total_price || 0;
@@ -392,22 +397,25 @@ export default function Comissoes() {
         const profData = commissionMap.get(profId);
         if (!profData) return;
 
-        // Priority: package_commission > professional_service_commissions > services.commission_percent > professionals.commission_percent
-        // Produtos vendidos: usa products.commission_percent (nao herda do profissional)
-        let commissionPercent = profData.professional.commission_percent || 0;
+        // Hierarquia v9: override item > override prof×svc > default profissional
+        // Pacote → package_commission_percent | Produto vendido → products.commission_percent
+        let commissionPercent = Number(profData.professional.commission_percent) || 0;
 
         if (item.item_type === "package") {
-          commissionPercent = profData.professional.package_commission_percent || commissionPercent;
+          commissionPercent = Number(profData.professional.package_commission_percent) || 0;
         } else if (item.item_type === "product" && item.product_id && productMap.has(item.product_id)) {
           commissionPercent = productMap.get(item.product_id)!.commission_percent;
-        } else if (item.service_id && serviceMap.has(item.service_id)) {
-          commissionPercent = serviceMap.get(item.service_id)?.commission_percent || commissionPercent;
         }
+
         if (item.item_type === "service" && item.service_id && profId) {
           const profCommKey = `${profId}:${item.service_id}`;
           if (profServiceCommMap.has(profCommKey)) {
             commissionPercent = profServiceCommMap.get(profCommKey)!;
           }
+        }
+
+        if (item.commission_percent_override !== null && item.commission_percent_override !== undefined) {
+          commissionPercent = Number(item.commission_percent_override);
         }
 
         const itemTotal = item.total_price || 0;
