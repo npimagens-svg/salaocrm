@@ -39,14 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [masterEmail, setMasterEmail] = useState<string>(DEFAULT_MASTER_EMAIL);
 
   useEffect(() => {
-    // Fetch master email from system config
+    // Fetch master email from system config (idempotente — pode rodar varias vezes)
     const fetchMasterEmail = async () => {
       const { data } = await supabase
         .from("system_config")
         .select("value")
         .eq("key", "master_user_email")
         .maybeSingle();
-      
+
       if (data?.value) {
         setMasterEmail(data.value);
       }
@@ -57,11 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         // Defer fetching salon ID to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
             fetchUserSalonId(session.user.id);
+            // Re-fetch master email apos login (caso RLS tenha bloqueado a primeira leitura como anon)
+            fetchMasterEmail();
           }, 0);
         } else {
           setSalonId(null);
@@ -76,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchUserSalonId(session.user.id);
+        // Re-fetch master email com sessao ativa (garantia)
+        fetchMasterEmail();
       }
       setLoading(false);
     });
@@ -152,7 +156,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserRole(null);
   };
 
-  const isMaster = user?.email === masterEmail;
+  // Comparacao case-insensitive e robusta a espaços/case do banco vs auth
+  const isMaster = !!user?.email && !!masterEmail &&
+    user.email.trim().toLowerCase() === masterEmail.trim().toLowerCase();
   const isAdmin = userRole === "admin";
   const canDelete = isMaster;
 
