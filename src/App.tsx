@@ -25,7 +25,6 @@ import ClientAlerts from "./pages/ClientAlerts";
 import ClientLoyalty from "./pages/ClientLoyalty";
 import NotFound from "./pages/NotFound";
 import SetupWizard from "./pages/SetupWizard";
-import MaiaInbox from "./pages/MaiaInbox";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 
 const queryClient = new QueryClient();
@@ -104,7 +103,6 @@ function AppRoutes() {
         <Route path="/relatorios/*" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
         <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
         <Route path="/configuracoes/*" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-        <Route path="/maia-inbox" element={<ProtectedRoute><MaiaInbox /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     );
@@ -149,6 +147,7 @@ function AppRoutes() {
       <Route path="/clientes/fidelidade" element={<ProtectedRoute><ClientLoyalty /></ProtectedRoute>} />
       <Route path="/clientes/*" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
       <Route path="/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
+      <Route path="/pacotes" element={<ProtectedRoute><Pacotes /></ProtectedRoute>} />
       <Route path="/profissionais" element={<ProtectedRoute><Profissionais /></ProtectedRoute>} />
       <Route path="/comandas" element={<ProtectedRoute><Comandas /></ProtectedRoute>} />
       <Route path="/comandas/*" element={<ProtectedRoute><Comandas /></ProtectedRoute>} />
@@ -164,7 +163,6 @@ function AppRoutes() {
       <Route path="/relatorios/*" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
       <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
       <Route path="/configuracoes/*" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-      <Route path="/maia-inbox" element={<ProtectedRoute><MaiaInbox /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
