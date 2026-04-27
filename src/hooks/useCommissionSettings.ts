@@ -90,6 +90,11 @@ export function useCommissionSettings() {
       return data as CommissionSettings | null;
     },
     enabled: !!salonId,
+    // Sempre revalidar ao montar — evita usar defaults antigos quando o JS
+    // de cache antigo carrega antes do hook ler o banco.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const saveMutation = useMutation({
