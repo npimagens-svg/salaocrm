@@ -986,8 +986,13 @@ CREATE UNIQUE INDEX idx_comanda_items_unique_appointment ON public.comanda_items
 -- 10. STORAGE BUCKET para avatares
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
 
+-- 10c. TRIGGER: nome de cliente sempre em UPPERCASE
+CREATE OR REPLACE FUNCTION public.uppercase_client_name() RETURNS TRIGGER AS $$ BEGIN NEW.name = UPPER(NEW.name); RETURN NEW; END; $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_uppercase_client_name ON public.clients;
+CREATE TRIGGER trg_uppercase_client_name BEFORE INSERT OR UPDATE OF name ON public.clients FOR EACH ROW EXECUTE FUNCTION public.uppercase_client_name();
+
 -- 11. SCHEMA VERSION (marca instalacao nova como atualizada)
-INSERT INTO public.system_config (key, value) VALUES ('schema_version', '7') ON CONFLICT (key) DO UPDATE SET value = '7';
+INSERT INTO public.system_config (key, value) VALUES ('schema_version', '8') ON CONFLICT (key) DO UPDATE SET value = '8';
 CREATE POLICY "Avatar images are publicly accessible" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
 CREATE POLICY "Authenticated users can upload avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update avatars" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');

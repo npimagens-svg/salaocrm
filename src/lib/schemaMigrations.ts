@@ -21,7 +21,7 @@ export interface SchemaMigration {
   statements: string[];
 }
 
-export const LATEST_SCHEMA_VERSION = 7;
+export const LATEST_SCHEMA_VERSION = 8;
 
 export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
   {
@@ -100,6 +100,17 @@ export const SCHEMA_MIGRATIONS: SchemaMigration[] = [
       `CREATE POLICY "Users can insert commission_adjustments in their salon" ON public.commission_adjustments FOR INSERT WITH CHECK (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));`,
       `DROP POLICY IF EXISTS "Users can delete commission_adjustments in their salon" ON public.commission_adjustments;`,
       `CREATE POLICY "Users can delete commission_adjustments in their salon" ON public.commission_adjustments FOR DELETE USING (salon_id IN (SELECT salon_id FROM public.profiles WHERE user_id = auth.uid()));`,
+    ],
+  },
+  {
+    version: 8,
+    name: "Nome de cliente sempre em MAIÚSCULA",
+    description: "Padroniza clients.name em UPPERCASE via trigger BEFORE INSERT/UPDATE. Atualiza retroativamente os clientes ja cadastrados.",
+    statements: [
+      `CREATE OR REPLACE FUNCTION public.uppercase_client_name() RETURNS TRIGGER AS $$ BEGIN NEW.name = UPPER(NEW.name); RETURN NEW; END; $$ LANGUAGE plpgsql;`,
+      `DROP TRIGGER IF EXISTS trg_uppercase_client_name ON public.clients;`,
+      `CREATE TRIGGER trg_uppercase_client_name BEFORE INSERT OR UPDATE OF name ON public.clients FOR EACH ROW EXECUTE FUNCTION public.uppercase_client_name();`,
+      `UPDATE public.clients SET name = UPPER(name) WHERE name <> UPPER(name);`,
     ],
   },
 ];

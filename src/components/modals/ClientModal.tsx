@@ -241,7 +241,8 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => updateField("name", e.target.value)}
+                      onChange={(e) => updateField("name", e.target.value.toUpperCase())}
+                      style={{ textTransform: "uppercase" }}
                       required
                     />
                   </div>
