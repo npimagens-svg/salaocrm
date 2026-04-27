@@ -21,7 +21,7 @@ import { supabase } from "@/lib/dynamicSupabaseClient";
 import { sendEmail } from "@/lib/sendEmail";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ServiceSearchSelect } from "@/components/shared/ServiceSearchSelect";
 import { CaixaSelectModal } from "@/components/caixa/CaixaSelectModal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -109,6 +109,45 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("itens");
   const { items, isLoading, addItem, removeItem, isAdding, isRemoving } = useComandaItems(comanda?.id || null);
+  const canEditCommissionPercent = !currentProfessionalId && (isMaster || hasPermission("comandas.view_others"));
+  const [editingCommissionItemId, setEditingCommissionItemId] = useState<string | null>(null);
+  const [commissionEditValue, setCommissionEditValue] = useState<string>("");
+
+  // Carregar overrides prof × serviço (regra 2 da hierarquia)
+  const { data: profServiceCommissions } = useQuery({
+    queryKey: ["all-professional-commissions", salonId],
+    queryFn: async () => {
+      if (!salonId) return [];
+      const { data, error } = await supabase
+        .from("professional_service_commissions")
+        .select("professional_id, service_id, commission_percent");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!salonId,
+  });
+  const profServiceCommMap = new Map<string, number>();
+  (profServiceCommissions ?? []).forEach((c: any) => {
+    profServiceCommMap.set(`${c.professional_id}:${c.service_id}`, Number(c.commission_percent));
+  });
+
+  const getEffectiveCommissionPercent = (item: EditableItem): number => {
+    if (item.commission_percent_override !== null && item.commission_percent_override !== undefined) {
+      return Number(item.commission_percent_override);
+    }
+    const profId = item.editProfessionalId || item.professional_id || comanda?.professional_id;
+    const prof = profId ? professionals.find(p => p.id === profId) : null;
+    if (!prof) return 0;
+    if (item.item_type === "package") {
+      return Number(prof.package_commission_percent) || 0;
+    }
+    const svcId = item.editServiceId || item.service_id;
+    if (svcId && profId) {
+      const k = `${profId}:${svcId}`;
+      if (profServiceCommMap.has(k)) return profServiceCommMap.get(k)!;
+    }
+    return Number(prof.commission_percent) || 0;
+  };
   const { reopenComanda, isReopening } = useComandas();
   const { calculateServiceCost } = useAllServiceProducts();
   const { deductStockForServices } = useStockMovements();
@@ -530,8 +569,42 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
     }
   };
 
+  const saveCommissionOverride = async (itemId: string, percent: number | null) => {
+    try {
+      const { error } = await supabase
+        .from("comanda_items")
+        .update({ commission_percent_override: percent })
+        .eq("id", itemId);
+      if (error) throw error;
+      setEditableItems(prev => prev.map(i =>
+        i.id === itemId ? { ...i, commission_percent_override: percent } : i
+      ));
+      queryClient.invalidateQueries({ queryKey: ["comandas", salonId] });
+      queryClient.invalidateQueries({ queryKey: ["comanda_items", comanda?.id] });
+      setEditingCommissionItemId(null);
+      setCommissionEditValue("");
+      toast({
+        title: percent === null ? "Comissão restaurada" : "Comissão alterada",
+        description: percent === null
+          ? "Voltou a usar o percentual padrão da regra."
+          : `Esse item agora paga ${percent}% de comissão.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao alterar comissão",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startEditingCommission = (item: EditableItem) => {
+    setEditingCommissionItemId(item.id);
+    setCommissionEditValue(String(getEffectiveCommissionPercent(item)));
+  };
+
   const toggleEditItem = (itemId: string) => {
-    setEditableItems(prev => prev.map(item => 
+    setEditableItems(prev => prev.map(item =>
       item.id === itemId ? { ...item, isEditing: !item.isEditing } : item
     ));
   };
@@ -1147,11 +1220,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         throw new Error(`Erro ao fechar comanda: ${closeError.message}`);
       }
 
-      // Update linked appointments to "paid" status
+      // Update linked appointments to "completed" status (azul na agenda)
       if (comanda.appointment_id) {
         await supabase
           .from("appointments")
-          .update({ status: "paid" })
+          .update({ status: "completed" })
           .eq("id", comanda.appointment_id);
       }
       // Also update appointments linked via comanda_items.source_appointment_id
@@ -1161,7 +1234,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       if (appointmentIds.length > 0) {
         await supabase
           .from("appointments")
-          .update({ status: "paid" })
+          .update({ status: "completed" })
           .in("id", appointmentIds);
       }
 
@@ -1205,15 +1278,18 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             .reduce((sum, item) => sum + (item.total_price || 0), 0);
 
           if (servicesTotal > 0) {
-            const creditAmount = Math.round(servicesTotal * 0.07 * 100) / 100;
+            const loyaltyPercent = (commissionSettings.loyalty_percent || 0) / 100;
+            const validityDays = commissionSettings.loyalty_validity_days || 15;
+            const minPurchase = commissionSettings.loyalty_min_purchase || 0;
+            const creditAmount = Math.round(servicesTotal * loyaltyPercent * 100) / 100;
             const expiresAt = new Date();
-            expiresAt.setDate(expiresAt.getDate() + 15);
+            expiresAt.setDate(expiresAt.getDate() + validityDays);
             await supabase.from("client_credits").insert({
               salon_id: salonId,
               client_id: comanda.client_id,
               comanda_id: comanda.id,
               credit_amount: creditAmount,
-              min_purchase_amount: 100,
+              min_purchase_amount: minPurchase,
               expires_at: expiresAt.toISOString(),
             });
 
@@ -1279,7 +1355,6 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         }
       }
 
-      // If client had existing debt and payment covers it, create credit entry to zero out
       // Quita divida anterior quando usuario marcou "Cobrar divida anterior" e o pagamento
       // cobriu itens + divida. Marca TODAS as client_debts abertas do cliente como pagas.
       if (chargeOldDebt && comanda.client_id && clientNetBalance < 0 && totalPayments >= totalToCharge - 0.01) {
@@ -1545,19 +1620,22 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                         <TableHead className="text-right w-24">Valor</TableHead>
                         <TableHead className="text-right w-16">Desc%</TableHead>
                         <TableHead className="text-right w-24">Final</TableHead>
+                        {canEditCommissionPercent && (
+                          <TableHead className="text-right w-24">Comissão %</TableHead>
+                        )}
                         <TableHead className="w-16"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {isLoading ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-4">
+                          <TableCell colSpan={canEditCommissionPercent ? 8 : 7} className="text-center py-4">
                             <Loader2 className="h-4 w-4 animate-spin mx-auto" />
                           </TableCell>
                         </TableRow>
                       ) : editableItems.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={canEditCommissionPercent ? 8 : 7} className="text-center py-8 text-muted-foreground">
                             Nenhum item adicionado
                           </TableCell>
                         </TableRow>
@@ -1677,6 +1755,87 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                               <TableCell className="text-right font-medium">
                                 {formatCurrency(item.total_price)}
                               </TableCell>
+                              {canEditCommissionPercent && (
+                                <TableCell className="text-right">
+                                  {editingCommissionItemId === item.id ? (
+                                    <div className="flex items-center gap-1 justify-end">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.5"
+                                        autoFocus
+                                        className="w-16 h-8 text-right"
+                                        value={commissionEditValue}
+                                        onChange={(e) => setCommissionEditValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            const v = parseFloat(commissionEditValue);
+                                            if (!isNaN(v) && v >= 0 && v <= 100) {
+                                              saveCommissionOverride(item.id, v);
+                                            }
+                                          } else if (e.key === "Escape") {
+                                            setEditingCommissionItemId(null);
+                                          }
+                                        }}
+                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-green-600"
+                                        onClick={() => {
+                                          const v = parseFloat(commissionEditValue);
+                                          if (!isNaN(v) && v >= 0 && v <= 100) {
+                                            saveCommissionOverride(item.id, v);
+                                          }
+                                        }}
+                                        title="Salvar"
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => setEditingCommissionItemId(null)}
+                                        title="Cancelar"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditingCommission(item)}
+                                      disabled={isComandaLocked}
+                                      className={`inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-muted disabled:opacity-50 ${
+                                        item.commission_percent_override !== null && item.commission_percent_override !== undefined
+                                          ? "text-primary font-semibold"
+                                          : "text-muted-foreground"
+                                      }`}
+                                      title={
+                                        item.commission_percent_override !== null && item.commission_percent_override !== undefined
+                                          ? "Comissão fixada — clique para alterar"
+                                          : "Padrão da regra — clique para fixar outro valor"
+                                      }
+                                    >
+                                      {getEffectiveCommissionPercent(item).toFixed(item.commission_percent_override !== null && item.commission_percent_override !== undefined ? 1 : 0)}%
+                                      {item.commission_percent_override !== null && item.commission_percent_override !== undefined && (
+                                        <span
+                                          className="ml-1 text-destructive hover:text-destructive/70 cursor-pointer"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            saveCommissionOverride(item.id, null);
+                                          }}
+                                          title="Voltar ao padrão"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </span>
+                                      )}
+                                    </button>
+                                  )}
+                                </TableCell>
+                              )}
                               <TableCell>
                                 <div className="flex items-center gap-1">
                                   {item.isEditing ? (
