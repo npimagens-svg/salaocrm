@@ -65,7 +65,7 @@ const statusColors: Record<string, string> = {
   blocked: "bg-[#34495e]",
 };
 
-const columnOptions = [3, 5, 8, 10, 12];
+const columnOptions = [3, 5, 8, 10, 12, 15, 20, 25];
 
 export default function Agenda() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -221,8 +221,14 @@ export default function Agenda() {
   }, [professionals]);
 
   const getAppointmentsAtSlot = (professionalId: string, timeSlot: string) => {
+    const interval = schedulingSettings.slot_interval_minutes;
+    const [slotH, slotM] = timeSlot.split(":").map(Number);
+    const slotStart = slotH * 60 + slotM;
+    const slotEnd = slotStart + interval;
+
     return appointments.filter(a => {
-      const appointmentTime = format(new Date(a.scheduled_at), "HH:mm");
+      const apptDate = new Date(a.scheduled_at);
+      const apptMinutes = apptDate.getHours() * 60 + apptDate.getMinutes();
       const isBlocked = a.notes?.startsWith("🔒 BLOQUEADO:");
       if (a.status === "cancelled" && !isBlocked) return false;
       // Filter by search
@@ -232,7 +238,7 @@ export default function Agenda() {
         const matchService = a.services?.name?.toLowerCase().includes(search);
         if (!matchClient && !matchService) return false;
       }
-      return a.professional_id === professionalId && appointmentTime === timeSlot;
+      return a.professional_id === professionalId && apptMinutes >= slotStart && apptMinutes < slotEnd;
     });
   };
 
@@ -598,21 +604,37 @@ export default function Agenda() {
               {/* Column Selector */}
               <div className="hidden lg:flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Ajustar colunas:</span>
-                <div className="flex gap-0.5">
-                  {columnOptions.map(num => (
-                    <button
-                      key={num}
-                      onClick={() => setMaxColumns(num)}
-                      className={cn(
-                        "w-7 h-7 rounded-md text-xs font-medium transition-colors",
-                        maxColumns === num
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/30 text-foreground hover:bg-muted/50"
-                      )}
-                    >
-                      {num}
-                    </button>
-                  ))}
+                <div className="flex gap-0.5 flex-wrap">
+                  {columnOptions.map(num => {
+                    const totalActive = professionals.filter(p => p.is_active).length;
+                    if (num > totalActive && num !== columnOptions[0]) return null;
+                    return (
+                      <button
+                        key={num}
+                        onClick={() => setMaxColumns(num)}
+                        className={cn(
+                          "min-w-7 h-7 px-1.5 rounded-md text-xs font-medium transition-colors",
+                          maxColumns === num
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/30 text-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {num}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setMaxColumns(999)}
+                    className={cn(
+                      "min-w-7 h-7 px-2 rounded-md text-xs font-medium transition-colors",
+                      maxColumns >= 999
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/30 text-foreground hover:bg-muted/50"
+                    )}
+                    title="Mostrar todos os profissionais ativos"
+                  >
+                    Todos
+                  </button>
                 </div>
               </div>
 
