@@ -11,6 +11,7 @@ import { useClients, Client, ClientInput } from "@/hooks/useClients";
 import { ClientModal } from "@/components/modals/ClientModal";
 import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal";
 import { ImportModal, ImportField } from "@/components/modals/ImportModal";
+import { MergeClientsModal } from "@/components/modals/MergeClientsModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +28,7 @@ export default function Clientes() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   const { clients, isLoading, createClient, updateClient, deleteClient, isCreating, isUpdating, isDeleting } = useClients();
   const { isMaster, salonId } = useAuth();
@@ -218,7 +220,7 @@ export default function Clientes() {
                 Importar
               </Button>
             )}
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => setMergeOpen(true)}>
               <Merge className="h-4 w-4" />
               Unir cadastros duplicados
             </Button>
@@ -443,6 +445,11 @@ export default function Clientes() {
         description="Importe clientes de uma planilha XLS, XLSX ou CSV exportada de outro sistema."
         fields={clientImportFields}
         onImport={handleImportClients}
+      />
+      <MergeClientsModal
+        open={mergeOpen}
+        onOpenChange={setMergeOpen}
+        clients={clients}
       />
     </AppLayoutNew>
   );
