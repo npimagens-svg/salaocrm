@@ -26,13 +26,28 @@ export interface MergeClientsInput {
   winnerData: ClientInput;
 }
 
+// Schemas legados podem não ter todas as colunas — detectar e ignorar silenciosamente.
+function isMissingColumnError(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    error.code === "PGRST204" ||
+    error.code === "42703" ||
+    (msg.includes("could not find") && msg.includes("column")) ||
+    msg.includes("does not exist")
+  );
+}
+
 async function countRows(table: string, column: string, id: string, salonId: string): Promise<number> {
   const { count, error } = await supabase
     .from(table)
     .select("*", { count: "exact", head: true })
     .eq("salon_id", salonId)
     .eq(column, id);
-  if (error) throw new Error(`Erro ao contar ${table}: ${error.message}`);
+  if (error) {
+    if (isMissingColumnError(error)) return 0;
+    throw new Error(`Erro ao contar ${table}: ${error.message}`);
+  }
   return count ?? 0;
 }
 
@@ -42,7 +57,10 @@ async function countArrayContains(table: string, column: string, id: string, sal
     .select("*", { count: "exact", head: true })
     .eq("salon_id", salonId)
     .contains(column, [id]);
-  if (error) throw new Error(`Erro ao contar ${table}: ${error.message}`);
+  if (error) {
+    if (isMissingColumnError(error)) return 0;
+    throw new Error(`Erro ao contar ${table}: ${error.message}`);
+  }
   return count ?? 0;
 }
 
@@ -132,7 +150,10 @@ async function reassignArrayColumn(
     .select(`id, ${column}`)
     .eq("salon_id", salonId)
     .contains(column, [loserId]);
-  if (error) throw new Error(`Erro ao ler ${table}: ${error.message}`);
+  if (error) {
+    if (isMissingColumnError(error)) return;
+    throw new Error(`Erro ao ler ${table}: ${error.message}`);
+  }
   if (!data) return;
   for (const row of data as Array<Record<string, unknown>>) {
     const ids = (row[column] as string[]) ?? [];
@@ -174,7 +195,10 @@ export function useMergeClients() {
           .update({ [column]: winnerId })
           .eq("salon_id", salonId)
           .eq(column, loserId);
-        if (error) throw new Error(`Erro ao migrar ${table}: ${error.message}`);
+        if (error) {
+          if (isMissingColumnError(error)) continue;
+          throw new Error(`Erro ao migrar ${table}: ${error.message}`);
+        }
       }
 
       // 3) Substitui o id do perdedor nos arrays de campanhas
