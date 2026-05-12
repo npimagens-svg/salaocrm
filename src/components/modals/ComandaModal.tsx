@@ -150,7 +150,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   };
   const { reopenComanda, isReopening } = useComandas();
   const { calculateServiceCost } = useAllServiceProducts();
-  const { deductStockForServices } = useStockMovements();
+  const { deductStockForServices, deductStockForKits } = useStockMovements();
   const { bankAccounts } = useBankAccounts();
   const { cardBrands } = useCardBrands();
   const { settings: commissionSettings } = useCommissionSettings();
@@ -175,6 +175,10 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productSearch, setProductSearch] = useState("");
+  const [kitPopoverOpen, setKitPopoverOpen] = useState(false);
+  const [availableKits, setAvailableKits] = useState<any[]>([]);
+  const [isLoadingKits, setIsLoadingKits] = useState(false);
+  const [kitSearch, setKitSearch] = useState("");
 
   // Load packages when popover opens
   const loadPackages = async () => {
@@ -284,6 +288,89 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       queryClient.invalidateQueries({ queryKey: ["products", salonId] });
     } catch (e: any) {
       toast({ title: "Erro ao adicionar produto", description: e.message, variant: "destructive" });
+    }
+  };
+
+  // Load active kits when popover opens
+  const loadKits = async () => {
+    if (!salonId) return;
+    setIsLoadingKits(true);
+    const { data } = await supabase
+      .from("product_kits")
+      .select(
+        "*, product_kit_items(quantity, product:products(id, name, sale_price, cost_price, current_stock, current_stock_fractional, unit_of_measure, unit_quantity))"
+      )
+      .eq("salon_id", salonId)
+      .eq("is_active", true)
+      .order("name");
+    setAvailableKits(data || []);
+    setIsLoadingKits(false);
+  };
+
+  // Calcula preço final de um kit usando a mesma lógica de calculateKit
+  const computeKitFinalPrice = (kit: any): { subtotal: number; finalPrice: number; cost: number } => {
+    const items = kit.product_kit_items || [];
+    const subtotal = items.reduce(
+      (s: number, i: any) =>
+        s + Number(i.quantity) * Number(i.product?.sale_price ?? 0),
+      0
+    );
+    const cost = items.reduce(
+      (s: number, i: any) =>
+        s + Number(i.quantity) * Number(i.product?.cost_price ?? 0),
+      0
+    );
+    const discount = Number(kit.discount_percent) || 0;
+    const finalPrice = Math.round(subtotal * (1 - discount / 100) * 100) / 100;
+    return { subtotal, finalPrice, cost };
+  };
+
+  const handleAddKit = async (kit: any) => {
+    if (!comanda?.id || !salonId) return;
+    setKitPopoverOpen(false);
+    setKitSearch("");
+
+    try {
+      // 1. PRÉ-CHECK de estoque dos produtos do kit
+      try {
+        await deductStockForKits([{ kitId: kit.id, quantity: 1 }], { dryRun: true });
+      } catch (kitErr) {
+        toast({
+          title: `Não foi possível adicionar "${kit.name}"`,
+          description: (kitErr as Error).message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { finalPrice, cost } = computeKitFinalPrice(kit);
+
+      // 2. Adiciona linha única na comanda
+      await addItem({
+        comanda_id: comanda.id,
+        service_id: null,
+        product_id: null,
+        kit_id: kit.id,
+        professional_id: comanda.professional_id || null,
+        description: `📦 Kit: ${kit.name}`,
+        item_type: "kit",
+        quantity: 1,
+        unit_price: finalPrice,
+        total_price: finalPrice,
+        product_cost: cost,
+      } as any);
+
+      // 3. Baixa de estoque imediata (consistente com produto avulso)
+      await deductStockForKits([{ kitId: kit.id, quantity: 1 }]);
+
+      toast({ title: `Kit "${kit.name}" adicionado!` });
+      queryClient.invalidateQueries({ queryKey: ["products", salonId] });
+    } catch (e: any) {
+      toast({
+        title: "Erro ao adicionar kit",
+        description: e.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -2019,6 +2106,69 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
                                         </CommandItem>
                                       );
                                     })}
+                                  </ScrollArea>
+                                </CommandGroup>
+                              )}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <Popover open={kitPopoverOpen} onOpenChange={(open) => { setKitPopoverOpen(open); if (open) { loadKits(); setKitSearch(""); } }}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <Package className="h-4 w-4" />
+                            Kit
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          <Command shouldFilter={false}>
+                            <div className="p-2">
+                              <input
+                                className="w-full px-3 py-2 text-sm border rounded-md outline-none focus:ring-2 focus:ring-primary"
+                                placeholder="Buscar kit..."
+                                value={kitSearch}
+                                onChange={(e) => setKitSearch(e.target.value)}
+                              />
+                            </div>
+                            <CommandList>
+                              {isLoadingKits ? (
+                                <div className="flex items-center justify-center py-6">
+                                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                </div>
+                              ) : availableKits.filter((k) => k.name.toLowerCase().includes(kitSearch.toLowerCase())).length === 0 ? (
+                                <CommandEmpty>Nenhum kit ativo cadastrado</CommandEmpty>
+                              ) : (
+                                <CommandGroup heading="Kits disponíveis">
+                                  <ScrollArea className="max-h-60">
+                                    {availableKits
+                                      .filter((k) => k.name.toLowerCase().includes(kitSearch.toLowerCase()))
+                                      .map((kit: any) => {
+                                        const { subtotal, finalPrice } = computeKitFinalPrice(kit);
+                                        const itemCount = kit.product_kit_items?.length || 0;
+                                        const discount = Number(kit.discount_percent) || 0;
+                                        return (
+                                          <CommandItem
+                                            key={kit.id}
+                                            onSelect={() => handleAddKit(kit)}
+                                            className="flex flex-col items-start gap-1 cursor-pointer py-3"
+                                          >
+                                            <div className="flex items-center justify-between w-full">
+                                              <span className="font-medium flex items-center gap-1">
+                                                📦 {kit.name}
+                                              </span>
+                                              <span className="font-bold text-primary">
+                                                R$ {finalPrice.toFixed(2)}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <span>{itemCount} {itemCount === 1 ? "produto" : "produtos"}</span>
+                                              {discount > 0 && (
+                                                <span className="text-green-600">• {discount.toFixed(0)}% off (era R$ {subtotal.toFixed(2)})</span>
+                                              )}
+                                            </div>
+                                          </CommandItem>
+                                        );
+                                      })}
                                   </ScrollArea>
                                 </CommandGroup>
                               )}

@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Loader2, Package, AlertTriangle, Edit, Trash2, Truck, Globe, Phone, ArrowDownToLine, ArrowUpFromLine, Upload } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
+import { useProductKits, ProductKit } from "@/hooks/useProductKits";
 import { useSuppliers, Supplier, SupplierInput } from "@/hooks/useSuppliers";
+import { calculateKit } from "@/lib/kits/calculations";
 import { ProductModal } from "@/components/modals/ProductModal";
 import { SupplierModal } from "@/components/modals/SupplierModal";
 import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal";
@@ -35,6 +37,11 @@ export default function Estoque() {
   const [stockEntryModalOpen, setStockEntryModalOpen] = useState(false);
   const [stockExitModalOpen, setStockExitModalOpen] = useState(false);
   const [importProductsOpen, setImportProductsOpen] = useState(false);
+  const [selectedKit, setSelectedKit] = useState<ProductKit | null>(null);
+  const [deleteKitModalOpen, setDeleteKitModalOpen] = useState(false);
+  const [kitToDelete, setKitToDelete] = useState<ProductKit | null>(null);
+  /** Aba inicial quando clicar 'Cadastrar' direto na tabela de Kits */
+  const [productModalInitialTab, setProductModalInitialTab] = useState<"produto" | "kit">("produto");
 
   const { isMaster, salonId } = useAuth();
   const { toast } = useToast();
@@ -85,6 +92,7 @@ export default function Estoque() {
   };
 
   const { products, isLoading: isLoadingProducts, createProduct, updateProduct, deleteProduct, isCreating, isUpdating } = useProducts();
+  const { kits, isLoading: isLoadingKits, createKit, updateKit, deleteKit, isCreating: isCreatingKit, isUpdating: isUpdatingKit, isDeleting: isDeletingKit } = useProductKits();
   const { 
     suppliers, 
     isLoading: isLoadingSuppliers, 
@@ -132,6 +140,44 @@ export default function Estoque() {
     }
     setProductModalOpen(false);
     setSelectedProduct(null);
+  };
+
+  // ─────────────────── Kits ───────────────────
+  const handleEditKit = (k: ProductKit) => {
+    setSelectedProduct(null);
+    setSelectedKit(k);
+    setProductModalInitialTab("kit");
+    setProductModalOpen(true);
+  };
+
+  const handleSubmitKit = (data: any) => {
+    if (data.id) {
+      updateKit(data);
+    } else {
+      createKit(data);
+    }
+    setProductModalOpen(false);
+    setSelectedKit(null);
+  };
+
+  const handleDeleteKitClick = (k: ProductKit) => {
+    setKitToDelete(k);
+    setDeleteKitModalOpen(true);
+  };
+
+  const confirmDeleteKit = () => {
+    if (kitToDelete) {
+      deleteKit(kitToDelete.id);
+      setKitToDelete(null);
+      setDeleteKitModalOpen(false);
+    }
+  };
+
+  const handleNewKit = () => {
+    setSelectedProduct(null);
+    setSelectedKit(null);
+    setProductModalInitialTab("kit");
+    setProductModalOpen(true);
   };
 
   const handleEditSupplier = (supplier: Supplier) => {
@@ -365,6 +411,121 @@ export default function Estoque() {
                 </Table>
               </CardContent>
             </Card>
+
+            {/* ─────────── Seção: Kits de Produtos ─────────── */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Package className="h-5 w-5 text-primary" />
+                      Kits de Produtos
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Combos de produtos com desconto único. Vendidos como linha única na comanda; estoque baixa nos produtos componentes.
+                    </p>
+                  </div>
+                  <Button onClick={handleNewKit} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Novo Kit
+                  </Button>
+                </div>
+
+                {isLoadingKits ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : kits.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8 border border-dashed rounded-md">
+                    Nenhum kit cadastrado. Clique em "Novo Kit" pra criar.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {kits.map((kit) => {
+                      const items = kit.product_kit_items || [];
+                      const calc = calculateKit(
+                        items.map((i) => ({
+                          quantity: Number(i.quantity),
+                          product: {
+                            sale_price: Number(i.product?.sale_price ?? 0),
+                            cost_price: Number(i.product?.cost_price ?? 0),
+                          },
+                        })),
+                        Number(kit.discount_percent)
+                      );
+                      return (
+                        <Card
+                          key={kit.id}
+                          className={`hover:shadow-md transition-shadow ${
+                            !kit.is_active ? "opacity-60" : ""
+                          }`}
+                        >
+                          <CardContent className="p-3 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">{kit.name}</p>
+                                {!kit.is_active && (
+                                  <Badge variant="secondary" className="text-xs mt-1">
+                                    Inativo
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleEditKit(kit)}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleDeleteKitClick(kit)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground space-y-0.5">
+                              {items.slice(0, 3).map((item) => (
+                                <div key={item.id} className="truncate">
+                                  • {Number(item.quantity)}× {item.product?.name || "Produto"}
+                                </div>
+                              ))}
+                              {items.length > 3 && (
+                                <div className="text-xs italic">
+                                  + {items.length - 3} {items.length - 3 === 1 ? "produto" : "produtos"}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t">
+                              <span className="text-sm">
+                                {calc.savings > 0 && (
+                                  <span className="line-through text-muted-foreground mr-1.5">
+                                    {formatCurrency(calc.subtotal)}
+                                  </span>
+                                )}
+                                <span className="font-bold text-primary">
+                                  {formatCurrency(calc.finalPrice)}
+                                </span>
+                              </span>
+                              {Number(kit.discount_percent) > 0 && (
+                                <Badge className="bg-green-600 hover:bg-green-700 text-xs">
+                                  {Number(kit.discount_percent).toFixed(0)}% off
+                                </Badge>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         ) : (
           /* Suppliers Content */
@@ -472,12 +633,20 @@ export default function Estoque() {
         open={productModalOpen}
         onOpenChange={(open) => {
           setProductModalOpen(open);
-          if (!open) setSelectedProduct(null);
+          if (!open) {
+            setSelectedProduct(null);
+            setSelectedKit(null);
+            setProductModalInitialTab("produto");
+          }
         }}
         product={selectedProduct}
+        kit={selectedKit}
         onSubmit={handleSubmitProduct}
+        onSubmitKit={handleSubmitKit}
         isLoading={isCreating || isUpdating}
+        isLoadingKit={isCreatingKit || isUpdatingKit}
         suppliers={suppliers}
+        initialTab={productModalInitialTab}
       />
 
       <SupplierModal
@@ -498,6 +667,15 @@ export default function Estoque() {
         title="Excluir Fornecedor"
         description={`Tem certeza que deseja excluir o fornecedor "${supplierToDelete?.name}"? Esta ação não poderá ser desfeita.`}
         isLoading={isDeletingSupplier}
+      />
+
+      <DeleteConfirmModal
+        open={deleteKitModalOpen}
+        onOpenChange={setDeleteKitModalOpen}
+        onConfirm={confirmDeleteKit}
+        title="Excluir Kit"
+        description={`Tem certeza que deseja excluir o kit "${kitToDelete?.name}"? Vendas históricas com esse kit serão preservadas.`}
+        isLoading={isDeletingKit}
       />
 
       <StockEntryModal
