@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.setup-schema]
 verify_jwt = true
+
+[functions.client-portal]
+verify_jwt = false

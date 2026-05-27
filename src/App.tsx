@@ -27,6 +27,11 @@ import NotFound from "./pages/NotFound";
 import SetupWizard from "./pages/SetupWizard";
 import Ajuda from "./pages/Ajuda";
 import Perfil from "./pages/Perfil";
+import PortalLanding from "./pages/cliente/PortalLanding";
+import PortalCadastro from "./pages/cliente/PortalCadastro";
+import PortalLogin from "./pages/cliente/PortalLogin";
+import PortalAgendar from "./pages/cliente/PortalAgendar";
+import PortalAgendamentos from "./pages/cliente/PortalAgendamentos";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 
 const queryClient = new QueryClient();
@@ -79,6 +84,12 @@ function AppRoutes() {
     if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
     return (
       <Routes>
+        {/* Portal Cliente — rotas públicas */}
+        <Route path="/cliente" element={<PortalLanding />} />
+        <Route path="/cliente/cadastro" element={<PortalCadastro />} />
+        <Route path="/cliente/login" element={<PortalLogin />} />
+        <Route path="/cliente/agendar" element={<PortalAgendar />} />
+        <Route path="/cliente/agendamentos" element={<PortalAgendamentos />} />
         <Route path="/setup" element={<Navigate to="/auth" replace />} />
         <Route path="/auth" element={user ? <Navigate to="/" replace /> : <AuthNew />} />
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -141,6 +152,12 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Portal Cliente — rotas públicas */}
+      <Route path="/cliente" element={<PortalLanding />} />
+      <Route path="/cliente/cadastro" element={<PortalCadastro />} />
+      <Route path="/cliente/login" element={<PortalLogin />} />
+      <Route path="/cliente/agendar" element={<PortalAgendar />} />
+      <Route path="/cliente/agendamentos" element={<PortalAgendamentos />} />
       <Route path="/setup" element={<SetupWizard />} />
       <Route path="/auth" element={user ? <Navigate to="/" replace /> : <AuthNew />} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
