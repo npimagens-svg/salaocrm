@@ -27,6 +27,7 @@ import NotFound from "./pages/NotFound";
 import SetupWizard from "./pages/SetupWizard";
 import Ajuda from "./pages/Ajuda";
 import Perfil from "./pages/Perfil";
+import Links from "./pages/Links";
 import PortalLanding from "./pages/cliente/PortalLanding";
 import PortalCadastro from "./pages/cliente/PortalCadastro";
 import PortalLogin from "./pages/cliente/PortalLogin";
@@ -118,6 +119,7 @@ function AppRoutes() {
         <Route path="/configuracoes/*" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
         <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />
         <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
+        <Route path="/links" element={<ProtectedRoute><Links /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     );
@@ -186,6 +188,7 @@ function AppRoutes() {
       <Route path="/configuracoes/*" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
       <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
+        <Route path="/links" element={<ProtectedRoute><Links /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

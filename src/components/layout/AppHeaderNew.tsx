@@ -100,9 +100,24 @@ export function AppHeaderNew() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>Link de Agendamento</DropdownMenuItem>
-            <DropdownMenuItem>Página do Salão</DropdownMenuItem>
-            <DropdownMenuItem>Compartilhar no WhatsApp</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/links")}>
+              Link de Agendamento + QR Code
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => window.open(`${window.location.origin}/cliente`, "_blank")}
+            >
+              Abrir Portal Cliente
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                const msg = encodeURIComponent(
+                  `Olá! Para marcar seu horário sozinha acesse: ${window.location.origin}/cliente`,
+                );
+                window.open(`https://wa.me/?text=${msg}`, "_blank");
+              }}
+            >
+              Compartilhar no WhatsApp
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
