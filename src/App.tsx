@@ -25,6 +25,8 @@ import ClientAlerts from "./pages/ClientAlerts";
 import ClientLoyalty from "./pages/ClientLoyalty";
 import NotFound from "./pages/NotFound";
 import SetupWizard from "./pages/SetupWizard";
+import Ajuda from "./pages/Ajuda";
+import Perfil from "./pages/Perfil";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 
 const queryClient = new QueryClient();
@@ -103,6 +105,8 @@ function AppRoutes() {
         <Route path="/relatorios/*" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
         <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
         <Route path="/configuracoes/*" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+        <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />
+        <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     );
@@ -163,6 +167,8 @@ function AppRoutes() {
       <Route path="/relatorios/*" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
       <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
       <Route path="/configuracoes/*" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+      <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />
+      <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

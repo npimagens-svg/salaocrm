@@ -13,6 +13,7 @@ export interface Service {
   commission_percent: number | null;
   category: string | null;
   is_active: boolean;
+  available_online: boolean;
   send_return_reminder: boolean;
   return_reminder_days: number | null;
   return_reminder_message: string | null;
@@ -28,6 +29,7 @@ export interface ServiceInput {
   commission_percent?: number;
   category?: string;
   is_active?: boolean;
+  available_online?: boolean;
   send_return_reminder?: boolean;
   return_reminder_days?: number;
   return_reminder_message?: string;

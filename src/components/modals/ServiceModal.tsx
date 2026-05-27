@@ -38,6 +38,7 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
     commission_percent: 0,
     category: "",
     is_active: true,
+    available_online: false,
     send_return_reminder: false,
     return_reminder_days: 30,
     return_reminder_message: "",
@@ -75,6 +76,7 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
         commission_percent: Number(service.commission_percent) || 0,
         category: service.category || "",
         is_active: service.is_active,
+        available_online: (service as any).available_online ?? false,
         send_return_reminder: service.send_return_reminder || false,
         return_reminder_days: service.return_reminder_days || 30,
         return_reminder_message: service.return_reminder_message || "",
@@ -88,6 +90,7 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
         commission_percent: 0,
         category: "",
         is_active: true,
+        available_online: false,
         send_return_reminder: false,
         return_reminder_days: 30,
         return_reminder_message: "",
@@ -214,6 +217,22 @@ export function ServiceModal({ open, onOpenChange, service, onSubmit, isLoading 
                   id="is_active"
                   checked={formData.is_active}
                   onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+                <div className="space-y-0.5">
+                  <Label htmlFor="available_online">Disponibilizar para agendamento online</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Quando ativo, a cliente pode marcar esse serviço sozinha no portal público.
+                  </p>
+                </div>
+                <Switch
+                  id="available_online"
+                  checked={(formData as any).available_online ?? false}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, available_online: checked } as any)
+                  }
                 />
               </div>
 

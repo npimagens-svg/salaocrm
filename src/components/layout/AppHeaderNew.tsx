@@ -107,7 +107,12 @@ export function AppHeaderNew() {
         </DropdownMenu>
 
         {/* Help button - icon only on mobile */}
-        <Button variant="default" size="sm" className="gap-1 h-8 px-2 md:px-3">
+        <Button
+          variant="default"
+          size="sm"
+          className="gap-1 h-8 px-2 md:px-3"
+          onClick={() => navigate("/ajuda")}
+        >
           <HelpCircle className="h-4 w-4" />
           <span className="hidden md:inline">Central de Ajuda</span>
         </Button>
