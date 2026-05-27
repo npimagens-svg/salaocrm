@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { ptBR } from "date-fns/locale";
 import { useAppointments, AppointmentInput, MultiAppointmentInput, Appointment } from "@/hooks/useAppointments";
-import { useProfessionals } from "@/hooks/useProfessionals";
+import { useProfessionals, canBookOnAgenda } from "@/hooks/useProfessionals";
 import { useClients } from "@/hooks/useClients";
 import { useServices } from "@/hooks/useServices";
 import { useSchedulingSettings } from "@/hooks/useSchedulingSettings";
@@ -139,11 +139,18 @@ export default function Agenda() {
     schedulingSettings.slot_interval_minutes
   ), [schedulingSettings.opening_time, schedulingSettings.closing_time, schedulingSettings.slot_interval_minutes]);
 
+  // Só seleciona por padrão profissionais que efetivamente atendem na agenda
+  // (is_active + has_schedule !== false). Recepcionista/vendedora fica fora.
+  const agendaProfessionals = useMemo(
+    () => professionals.filter(canBookOnAgenda),
+    [professionals],
+  );
+
   useEffect(() => {
-    if (professionals.length > 0 && selectedProfessionalIds.length === 0) {
-      setSelectedProfessionalIds(professionals.map((p) => p.id));
+    if (agendaProfessionals.length > 0 && selectedProfessionalIds.length === 0) {
+      setSelectedProfessionalIds(agendaProfessionals.map((p) => p.id));
     }
-  }, [professionals, selectedProfessionalIds.length]);
+  }, [agendaProfessionals, selectedProfessionalIds.length]);
 
   const formatMonthYear = (date: Date) => {
     return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -190,10 +197,10 @@ export default function Agenda() {
   };
 
   const toggleAll = () => {
-    if (selectedProfessionalIds.length === professionals.length) {
+    if (selectedProfessionalIds.length === agendaProfessionals.length) {
       setSelectedProfessionalIds([]);
     } else {
-      setSelectedProfessionalIds(professionals.map(p => p.id));
+      setSelectedProfessionalIds(agendaProfessionals.map(p => p.id));
     }
   };
 
@@ -201,9 +208,8 @@ export default function Agenda() {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   };
 
-  const filteredProfessionals = professionals
+  const filteredProfessionals = agendaProfessionals
     .filter(p =>
-      p.is_active &&
       (selectedProfessionalIds.length === 0 || selectedProfessionalIds.includes(p.id)) &&
       p.name.toLowerCase().includes(searchProfessional.toLowerCase())
     )
@@ -212,13 +218,13 @@ export default function Agenda() {
   // Group professionals by role/specialty for sidebar
   const professionalsByCategory = useMemo(() => {
     const categories: Record<string, typeof professionals> = {};
-    professionals.filter(p => p.is_active).forEach(prof => {
+    agendaProfessionals.forEach(prof => {
       const cat = prof.specialty || prof.role || "Geral";
       if (!categories[cat]) categories[cat] = [];
       categories[cat].push(prof);
     });
     return categories;
-  }, [professionals]);
+  }, [agendaProfessionals]);
 
   const getAppointmentsAtSlot = (professionalId: string, timeSlot: string) => {
     const interval = schedulingSettings.slot_interval_minutes;
@@ -448,14 +454,14 @@ export default function Agenda() {
                 onClick={toggleAll}
                 className={cn(
                   "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium shrink-0 border",
-                  selectedProfessionalIds.length === professionals.length
+                  selectedProfessionalIds.length === agendaProfessionals.length
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-muted/30 border-border"
                 )}
               >
                 Todos
               </button>
-              {professionals.filter(p => p.is_active).map((prof) => (
+              {agendaProfessionals.map((prof) => (
                 <button
                   key={prof.id}
                   onClick={() => toggleProfessional(prof.id)}
@@ -476,7 +482,7 @@ export default function Agenda() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Checkbox
-                    checked={selectedProfessionalIds.length === professionals.filter(p => p.is_active).length}
+                    checked={selectedProfessionalIds.length === agendaProfessionals.length}
                     onCheckedChange={toggleAll}
                   />
                   <span className="text-xs font-medium">Todos</span>
@@ -525,7 +531,7 @@ export default function Agenda() {
                 </div>
               ))}
 
-              {professionals.filter(p => p.is_active).length === 0 && (
+              {agendaProfessionals.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">
                   Nenhum profissional cadastrado
                 </p>
@@ -606,7 +612,7 @@ export default function Agenda() {
                 <span className="text-xs text-muted-foreground">Ajustar colunas:</span>
                 <div className="flex gap-0.5 flex-wrap">
                   {columnOptions.map(num => {
-                    const totalActive = professionals.filter(p => p.is_active).length;
+                    const totalActive = agendaProfessionals.length;
                     if (num > totalActive && num !== columnOptions[0]) return null;
                     return (
                       <button
@@ -836,7 +842,7 @@ export default function Agenda() {
         }}
         appointment={selectedAppointment}
         clients={clients}
-        professionals={professionals.filter(p => p.is_active)}
+        professionals={agendaProfessionals}
         services={services.filter(s => s.is_active)}
         onSubmit={handleSubmit}
         onSubmitMultiple={handleSubmitMultiple}
@@ -850,7 +856,7 @@ export default function Agenda() {
       <BlockTimeModal
         open={blockModalOpen}
         onOpenChange={setBlockModalOpen}
-        professionals={professionals.filter(p => p.is_active)}
+        professionals={agendaProfessionals}
         onSubmit={handleBlockTime}
         isLoading={isBlocking}
         defaultDate={currentDate}

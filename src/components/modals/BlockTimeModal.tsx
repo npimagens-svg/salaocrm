@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Professional } from "@/hooks/useProfessionals";
+import { Professional, canBookOnAgenda } from "@/hooks/useProfessionals";
 import { Ban } from "lucide-react";
 
 interface BlockTimeModalProps {
@@ -103,7 +103,7 @@ export function BlockTimeModal({
                 <SelectValue placeholder="Selecione um profissional" />
               </SelectTrigger>
               <SelectContent>
-                {professionals.filter((p) => p.is_active).map((pro) => (
+                {professionals.filter(canBookOnAgenda).map((pro) => (
                   <SelectItem key={pro.id} value={pro.id}>
                     {pro.name}
                   </SelectItem>

@@ -40,6 +40,18 @@ export interface Professional {
   updated_at: string;
 }
 
+/**
+ * Filtra profissionais que devem aparecer na AGENDA (colunas, slots, criação de
+ * agendamento, bloqueios). Recepcionista/vendedora que recebe comissão mas não
+ * atende cliente vem cadastrada com is_active=true + has_schedule=false e NÃO
+ * deve aparecer aqui.
+ *
+ * has_schedule null = retro-compat com profissionais antigos antes da coluna
+ * existir — assume true.
+ */
+export const canBookOnAgenda = (p: { is_active: boolean; has_schedule: boolean | null }): boolean =>
+  !!p.is_active && p.has_schedule !== false;
+
 export type AppRole = "admin" | "manager" | "receptionist" | "financial" | "professional";
 
 export interface ProfessionalInput {

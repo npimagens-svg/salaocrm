@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Appointment, AppointmentInput, MultiAppointmentInput } from "@/hooks/useAppointments";
 import { Client } from "@/hooks/useClients";
-import { Professional } from "@/hooks/useProfessionals";
+import { Professional, canBookOnAgenda } from "@/hooks/useProfessionals";
 import { Service } from "@/hooks/useServices";
 import { DollarSign, Plus, X } from "lucide-react";
 import { isSameDay, isFuture, startOfDay } from "date-fns";
@@ -401,7 +401,7 @@ export function AppointmentModal({
   };
 
   const activeServices = useMemo(() => services.filter((s) => s.is_active), [services]);
-  const activeProfessionals = useMemo(() => professionals.filter((p) => p.is_active), [professionals]);
+  const activeProfessionals = useMemo(() => professionals.filter(canBookOnAgenda), [professionals]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
