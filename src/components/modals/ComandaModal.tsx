@@ -577,9 +577,10 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
     const professionalId = comanda.professional_id;
     if (professionalId) {
       try {
-        // Schedule for current time today
-        const now = new Date();
-        
+        // Usa o DIA da comanda (não "hoje") pra não jogar o agendamento na
+        // agenda de hoje quando a comanda é de outro dia.
+        const baseDate = new Date(comanda.created_at);
+
         const { error } = await supabase
           .from("appointments")
           .insert({
@@ -587,7 +588,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             client_id: comanda.client_id,
             professional_id: professionalId,
             service_id: serviceId,
-            scheduled_at: now.toISOString(),
+            scheduled_at: baseDate.toISOString(),
             duration_minutes: service.duration_minutes || 30,
             price: finalPrice,
             status: "in_progress",
@@ -894,15 +895,10 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         }
       }
 
-      // Update comanda date to today
-      const now = new Date();
-      await supabase
-        .from("comandas")
-        .update({ 
-          created_at: now.toISOString(),
-          updated_at: now.toISOString(),
-        })
-        .eq("id", comanda.id);
+      // NÃO altera a data da comanda. O botão Atualizar serve só pra puxar pra
+      // comanda os serviços que a cliente fez NAQUELE MESMO DIA (inclusive com
+      // outros profissionais) — útil quando a comanda foi aberta da agenda de um
+      // profissional só e os demais serviços não vieram junto.
 
       // Refresh data
       queryClient.invalidateQueries({ queryKey: ["comandas", salonId] });
@@ -911,7 +907,7 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
       const messages = [];
       if (itemsAdded > 0) messages.push(`${itemsAdded} serviço(s) adicionado(s)`);
       if (itemsUpdated > 0) messages.push(`${itemsUpdated} serviço(s) atualizado(s)`);
-      messages.push("Data atualizada para hoje");
+      if (messages.length === 0) messages.push("Nenhum serviço novo encontrado nos agendamentos do dia");
 
       toast({ 
         title: "Comanda atualizada!", 
