@@ -312,19 +312,20 @@ serve(async (req) => {
           return json({ error: "salon_id, professional_id, service_id, date required" }, 400);
         }
 
-        // Carrega: scheduling_settings (slot_interval) + service.duration + work_schedules do prof + appointments existentes
+        // Carrega: scheduling_settings (horário do SALÃO) + service.duration + appointments existentes.
+        // Regra (decisão Cleiton 28/05): usar horário do SALÃO, não do profissional.
+        // Sobreposição com outros agendamentos é OK — só bloqueia se o START_TIME exato
+        // bater com outro appointment do mesmo profissional.
         const [
           { data: settings },
           { data: service },
-          { data: schedules },
           { data: appts },
         ] = await Promise.all([
           admin.from("scheduling_settings").select("*").eq("salon_id", salon_id).maybeSingle(),
           admin.from("services").select("duration_minutes, available_online, is_active").eq("id", service_id).single(),
-          admin.from("professional_work_schedules").select("*").eq("professional_id", professional_id),
           admin
             .from("appointments")
-            .select("scheduled_at, duration_minutes, status")
+            .select("scheduled_at, status")
             .eq("professional_id", professional_id)
             .gte("scheduled_at", `${date}T00:00:00`)
             .lt("scheduled_at", `${date}T23:59:59`)
@@ -339,6 +340,8 @@ serve(async (req) => {
         const duration = service.duration_minutes ?? 30;
         const minAdvanceHrs = settings?.min_advance_hours ?? 0;
         const maxAdvanceDays = settings?.max_advance_days ?? 60;
+        const opening = settings?.opening_time ?? "09:00:00";
+        const closing = settings?.closing_time ?? "19:00:00";
 
         // Valida janela
         const now = new Date();
@@ -349,56 +352,40 @@ serve(async (req) => {
           return json({ slots: [], reason: "Data muito distante" });
         }
 
-        // Dia da semana
+        // Salão abre nesse dia?
         const dow = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][
           target.getDay()
         ];
-
-        // Salão abre nesse dia?
         if (settings && settings[dow] === false) {
           return json({ slots: [], reason: "Salão fechado neste dia" });
         }
 
-        // Profissional trabalha nesse dia? (qualquer um dos work_schedules dele tem o dia true)
-        const workOnDay = (schedules ?? []).filter((s: any) => s[dow]);
-        if (workOnDay.length === 0) {
-          return json({ slots: [], reason: "Profissional não trabalha neste dia" });
-        }
+        // Gera grade de slots dentro do horário de funcionamento DO SALÃO
+        const [sh, sm] = String(opening).split(":").map(Number);
+        const [eh, em] = String(closing).split(":").map(Number);
+        let cur = new Date(target);
+        cur.setHours(sh, sm ?? 0, 0, 0);
+        const end = new Date(target);
+        end.setHours(eh, em ?? 0, 0, 0);
 
-        // Gera todos os slots possíveis dentro do horário de trabalho dele
+        // Conjunto de horários inicial já ocupados pelo profissional
+        const busyStartTimes = new Set(
+          (appts ?? []).map((a: any) => {
+            const d = new Date(a.scheduled_at);
+            return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+          }),
+        );
+
         const slots: string[] = [];
-        for (const ws of workOnDay) {
-          const [sh, sm] = String(ws.start_time).split(":").map(Number);
-          const [eh, em] = String(ws.end_time).split(":").map(Number);
-          let cur = new Date(target);
-          cur.setHours(sh, sm, 0, 0);
-          const end = new Date(target);
-          end.setHours(eh, em, 0, 0);
-
-          while (cur.getTime() + duration * 60_000 <= end.getTime()) {
-            if (cur >= minDate) {
-              const hhmm = `${String(cur.getHours()).padStart(2, "0")}:${String(cur.getMinutes()).padStart(2, "0")}`;
-              slots.push(hhmm);
-            }
-            cur = new Date(cur.getTime() + interval * 60_000);
+        while (cur.getTime() + duration * 60_000 <= end.getTime()) {
+          const hhmm = `${String(cur.getHours()).padStart(2, "0")}:${String(cur.getMinutes()).padStart(2, "0")}`;
+          if (cur >= minDate && !busyStartTimes.has(hhmm)) {
+            slots.push(hhmm);
           }
+          cur = new Date(cur.getTime() + interval * 60_000);
         }
 
-        // Remove slots que conflitam com appointments existentes
-        const busy: Array<[number, number]> = (appts ?? []).map((a: any) => {
-          const start = new Date(a.scheduled_at).getTime();
-          return [start, start + (a.duration_minutes ?? 30) * 60_000];
-        });
-
-        const slotsLivres = slots.filter((hhmm) => {
-          const [h, m] = hhmm.split(":").map(Number);
-          const slotStart = new Date(target);
-          slotStart.setHours(h, m, 0, 0);
-          const slotEnd = slotStart.getTime() + duration * 60_000;
-          return !busy.some(([bs, be]) => slotStart.getTime() < be && slotEnd > bs);
-        });
-
-        return json({ slots: Array.from(new Set(slotsLivres)).sort() });
+        return json({ slots: Array.from(new Set(slots)).sort() });
       }
 
       // ===== CREATE APPOINTMENT =====
