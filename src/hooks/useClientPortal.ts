@@ -214,8 +214,8 @@ export function useClientPortal() {
   return {
     session,
     client,
-    loading,
-    isAuthenticated: !!session && !!client,
+    loading: !sessionReady, // só espera o session — client é nice-to-have
+    isAuthenticated: !!session, // não depende de client (que pode oscilar via me)
     salonId: SALON_ID,
     lookupMatch,
     signup,
