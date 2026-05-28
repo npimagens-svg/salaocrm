@@ -24,7 +24,7 @@ export function ProfessionalCommissionSummary({ professionalId, commissionPercen
   const navigate = useNavigate();
   const { services } = useServices();
   const { products } = useProducts();
-  const { commissionSettings } = useCommissionSettings();
+  const { settings: commissionSettings } = useCommissionSettings();
 
   const serviceMap = useMemo(() => {
     const map = new Map<string, number>();
