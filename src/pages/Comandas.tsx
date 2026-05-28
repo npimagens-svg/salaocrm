@@ -22,6 +22,7 @@ import { useServices } from "@/hooks/useServices";
 import { useCaixas } from "@/hooks/useCaixas";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/dynamicSupabaseClient";
+import { checkAndConsumePackageCredit } from "@/lib/packageCredit";
 import { format, isSameDay, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -210,24 +211,36 @@ export default function Comandas() {
             (!existingByService || existingByService.length === 0)) {
           const servicePrice = appointmentData.price ?? appointmentData.services?.price ?? 0;
           
+          // Debita do pacote do cliente se este serviço estiver coberto.
+          const credit = await checkAndConsumePackageCredit({
+            clientId: appointmentData.client_id,
+            salonId: comanda.salon_id,
+            serviceId: appointmentData.service_id,
+            serviceName: appointmentData.services?.name || "Serviço",
+            servicePrice: Number(servicePrice),
+            comandaId: comanda.id,
+            professionalId: appointmentData.professional_id,
+            note: "Uso automático ao abrir comanda do agendamento",
+          });
+
           await supabase.from("comanda_items").insert({
             comanda_id: comanda.id,
             service_id: appointmentData.service_id,
             professional_id: appointmentData.professional_id,
             source_appointment_id: appointmentData.id,
-            description: appointmentData.services?.name || "Serviço",
+            description: credit.description,
             item_type: "service",
             quantity: 1,
-            unit_price: servicePrice,
-            total_price: servicePrice,
+            unit_price: credit.finalPrice,
+            total_price: credit.finalPrice,
           });
 
-          // Update comanda totals
+          // Update comanda totals (preço já considera o débito do pacote)
           await supabase
             .from("comandas")
             .update({
-              subtotal: (comanda.subtotal || 0) + Number(servicePrice),
-              total: (comanda.total || 0) + Number(servicePrice),
+              subtotal: (comanda.subtotal || 0) + Number(credit.finalPrice),
+              total: (comanda.total || 0) + Number(credit.finalPrice),
             })
             .eq("id", comanda.id);
         } else if (existingByService && existingByService.length > 0 && 

@@ -18,6 +18,7 @@ import { format, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useComandaItems, useComandas, ComandaItem, Comanda } from "@/hooks/useComandas";
 import { supabase } from "@/lib/dynamicSupabaseClient";
+import { checkAndConsumePackageCredit, PACKAGE_CREDIT_BADGE } from "@/lib/packageCredit";
 import { sendEmail } from "@/lib/sendEmail";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -539,71 +540,21 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
     // Calculate product cost for this service
     const productCost = calculateServiceCost(serviceId);
 
-    // Check if client has an active package with credits for this service
-    let usedPackageCredit = false;
-    let packageLabel = "";
-    if (comanda.client_id) {
-      try {
-        // Step 1: Get active client packages
-        const { data: clientPackages } = await supabase
-          .from("client_packages")
-          .select("id, package_id")
-          .eq("client_id", comanda.client_id)
-          .eq("salon_id", salonId)
-          .eq("status", "active");
-
-        if (clientPackages && clientPackages.length > 0) {
-          for (const cp of clientPackages) {
-            // Step 2: Get package name
-            const { data: pkg } = await supabase
-              .from("packages")
-              .select("name")
-              .eq("id", cp.package_id)
-              .single();
-
-            // Step 3: Check if this package contains the service
-            const { data: pkgItem } = await supabase
-              .from("package_items")
-              .select("quantity")
-              .eq("package_id", cp.package_id)
-              .eq("service_id", serviceId)
-              .maybeSingle();
-
-            if (!pkgItem) continue;
-            const totalCredits = pkgItem.quantity;
-
-            // Step 4: Count existing usage
-            const { count: usageCount } = await supabase
-              .from("client_package_usage")
-              .select("id", { count: "exact", head: true })
-              .eq("client_package_id", cp.id)
-              .eq("service_id", serviceId);
-
-            const used = usageCount || 0;
-            if (used < totalCredits) {
-              // Has remaining credits — register usage
-              await supabase.from("client_package_usage").insert({
-                client_package_id: cp.id,
-                service_id: serviceId,
-                comanda_id: comanda.id,
-                professional_id: comanda.professional_id || null,
-                notes: `Uso automático via comanda #${comandaRef}`,
-              });
-
-              const pkgName = pkg?.name || "Pacote";
-              packageLabel = `📦 ${pkgName} (${used + 1}/${totalCredits})`;
-              usedPackageCredit = true;
-              break;
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Erro ao verificar pacotes do cliente:", e);
-      }
-    }
-
-    const finalPrice = usedPackageCredit ? 0 : Number(service.price);
-    const description = usedPackageCredit ? `${service.name} — ${packageLabel}` : service.name;
+    // Debita do pacote do cliente se este serviço estiver coberto.
+    const credit = await checkAndConsumePackageCredit({
+      clientId: comanda.client_id,
+      salonId,
+      serviceId,
+      serviceName: service.name,
+      servicePrice: Number(service.price),
+      comandaId: comanda.id,
+      professionalId: comanda.professional_id,
+      note: `Uso automático via comanda #${comandaRef}`,
+    });
+    const usedPackageCredit = credit.usedCredit;
+    const packageLabel = credit.packageLabel;
+    const finalPrice = credit.finalPrice;
+    const description = credit.description;
 
     // Add item to comanda with product cost and professional
     addItem({
@@ -876,8 +827,15 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
         }
 
         if (existingItem) {
-          // Update existing item with appointment data (price, professional, and set source_appointment_id)
-          const newPrice = appointment.price ?? appointment.services.price ?? 0;
+          // Update existing item with appointment data (price, professional, and set source_appointment_id).
+          // Não sobrescreve o preço de item já debitado de pacote (preço 0 + selo).
+          const isPackageCredited =
+            Number(existingItem.unit_price) === 0 &&
+            typeof existingItem.description === "string" &&
+            existingItem.description.includes(PACKAGE_CREDIT_BADGE);
+          const newPrice = isPackageCredited
+            ? 0
+            : (appointment.price ?? appointment.services.price ?? 0);
           const needsSourceUpdate = !existingItem.source_appointment_id;
           const shouldUpdate = existingItem.unit_price !== newPrice || 
                                existingItem.professional_id !== appointment.professional_id ||
@@ -899,8 +857,19 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
             itemsUpdated++;
           }
         } else {
-          // Add new item from appointment (only if no matching item found)
+          // Add new item from appointment (only if no matching item found).
+          // Debita do pacote do cliente se o serviço estiver coberto.
           const newItemPrice = appointment.price ?? appointment.services.price ?? 0;
+          const credit = await checkAndConsumePackageCredit({
+            clientId: comanda.client_id,
+            salonId,
+            serviceId: appointment.service_id,
+            serviceName: appointment.services.name,
+            servicePrice: Number(newItemPrice),
+            comandaId: comanda.id,
+            professionalId: appointment.professional_id,
+            note: `Uso automático via comanda #${comandaRef}`,
+          });
           const { data: insertedItem } = await supabase
             .from("comanda_items")
             .insert({
@@ -908,11 +877,11 @@ export function ComandaModal({ comanda, open, onClose, professionals, services, 
               service_id: appointment.service_id,
               professional_id: appointment.professional_id,
               source_appointment_id: appointment.id,
-              description: appointment.services.name,
+              description: credit.description,
               item_type: "service",
               quantity: 1,
-              unit_price: newItemPrice,
-              total_price: newItemPrice,
+              unit_price: credit.finalPrice,
+              total_price: credit.finalPrice,
             })
             .select()
             .single();
