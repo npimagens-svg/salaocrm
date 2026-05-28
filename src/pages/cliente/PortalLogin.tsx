@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { ClientLayout } from "./ClientLayout";
 import { useClientPortal } from "@/hooks/useClientPortal";
@@ -11,13 +11,20 @@ import { useToast } from "@/hooks/use-toast";
 import { LogIn, Loader2, ArrowLeft } from "lucide-react";
 
 export default function PortalLogin() {
-  const { login } = useClientPortal();
+  const { login, isAuthenticated, loading } = useClientPortal();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Se já está logado quando entra nessa tela, vai direto pra Agendar
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate("/cliente/agendar", { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

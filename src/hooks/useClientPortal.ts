@@ -114,6 +114,15 @@ export function useClientPortal() {
     [],
   );
 
+  // Helper: gera o email sintético usado pra auth.users no Supabase
+  // (mesma regra do Edge Function client-portal). Estável por (salon, phone).
+  function syntheticEmail(phone: string): string {
+    const digits = String(phone).replace(/\D/g, "");
+    const phoneNorm = digits.startsWith("55") ? digits : "55" + digits;
+    const salonShort = SALON_ID.replace(/-/g, "").slice(0, 12);
+    return `c_${phoneNorm}_${salonShort}@portal.local`;
+  }
+
   const signup = useCallback(
     async (data: {
       name: string;
@@ -123,29 +132,30 @@ export function useClientPortal() {
       password: string;
       existing_client_id?: string;
     }) => {
+      // 1. Edge Function cria auth.users + client + client_auth
       const r = await callApi("signup", data);
-      // Edge Function devolve session; precisamos colocar no client local
-      if (r.session) {
-        await sb.auth.setSession({
-          access_token: r.session.access_token,
-          refresh_token: r.session.refresh_token,
-        });
-      }
-      return r;
+      // 2. Login DIRETO no Supabase Auth client local — garante que
+      //    onAuthStateChange dispara e session persiste no storage.
+      const { data: signin, error } = await sb.auth.signInWithPassword({
+        email: syntheticEmail(data.phone),
+        password: data.password,
+      });
+      if (error) throw new Error("Conta criada, mas falha ao logar: " + error.message);
+      return { ...r, session: signin.session };
     },
     [sb],
   );
 
   const login = useCallback(
     async (phone: string, password: string) => {
-      const r = await callApi("login", { phone, password });
-      if (r.session) {
-        await sb.auth.setSession({
-          access_token: r.session.access_token,
-          refresh_token: r.session.refresh_token,
-        });
-      }
-      return r;
+      // Login DIRETO no Supabase Auth client local (não via Edge Function).
+      // Garante onAuthStateChange + persistência local de session.
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: syntheticEmail(phone),
+        password,
+      });
+      if (error) throw new Error("Telefone ou senha incorretos");
+      return { ok: true, session: data.session };
     },
     [sb],
   );

@@ -11,9 +11,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export default function PortalCadastro() {
-  const { signup, lookupMatch } = useClientPortal();
+  const { signup, lookupMatch, isAuthenticated, loading } = useClientPortal();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Se já está logado, vai direto pra Agendar
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate("/cliente/agendar", { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
