@@ -28,9 +28,12 @@ export default function PortalAgendar() {
   const [chosenService, setChosenService] = useState<Service | null>(null);
   const [chosenPro, setChosenPro] = useState<Professional | null>(null);
   const [chosenDate, setChosenDate] = useState<string>(() => {
+    // HOJE em data local (não UTC — evita pular dia depois das 21h BR)
     const t = new Date();
-    t.setDate(t.getDate() + 1); // amanhã
-    return t.toISOString().slice(0, 10);
+    const yy = t.getFullYear();
+    const mm = String(t.getMonth() + 1).padStart(2, "0");
+    const dd = String(t.getDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
   });
   const [chosenSlot, setChosenSlot] = useState<string | null>(null);
   const [loadingStep, setLoadingStep] = useState(false);
@@ -103,11 +106,15 @@ export default function PortalAgendar() {
     setSlots([]);
   }
 
-  // Próximos 14 dias pra escolher
+  // Próximos 14 dias pra escolher (HOJE + 13 dias seguintes).
+  // Usa data LOCAL (não UTC) pra não pular dia depois das 21h BR.
   const dateOptions = Array.from({ length: 14 }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() + i + 1);
-    return d.toISOString().slice(0, 10);
+    d.setDate(d.getDate() + i);
+    const yy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
   });
 
   return (
