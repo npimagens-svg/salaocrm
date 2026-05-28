@@ -873,6 +873,7 @@ export default function Agenda() {
         onSubmit={handleClientSubmit}
         initialName={pendingClientName}
         client={viewClient || undefined}
+        onUseExisting={handleViewClient}
       />
 
       <AlertDialog

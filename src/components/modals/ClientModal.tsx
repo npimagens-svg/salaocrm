@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Client, ClientInput } from "@/hooks/useClients";
+import { Client, ClientInput, useClients } from "@/hooks/useClients";
+import { AlertTriangle } from "lucide-react";
 import { useClientComandas } from "@/hooks/useComandas";
 import { useProfessionals } from "@/hooks/useProfessionals";
 import { useCepLookup } from "@/hooks/useCepLookup";
@@ -45,6 +46,16 @@ interface ClientModalProps {
   onSubmit: (data: ClientInput & { id?: string }) => void;
   isLoading?: boolean;
   initialName?: string;
+  // Quando informado, o aviso de cadastro duplicado mostra um botão pra usar o
+  // cadastro existente em vez de criar um novo (ex.: selecionar no agendamento).
+  onUseExisting?: (clientId: string) => void;
+}
+
+// Telefone normalizado pra comparar (só dígitos, sem 55 inicial e sem o 9 extra).
+function normalizePhoneKey(raw?: string | null): string {
+  let d = String(raw ?? "").replace(/\D/g, "");
+  if (d.startsWith("55") && d.length > 11) d = d.slice(2);
+  return d;
 }
 
 const BRAZILIAN_STATES = [
@@ -106,8 +117,27 @@ const initialFormData: ClientInput = {
   avatar_url: null,
 };
 
-export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, initialName }: ClientModalProps) {
+export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, initialName, onUseExisting }: ClientModalProps) {
   const [formData, setFormData] = useState<ClientInput>({ ...initialFormData, name: initialName || "" });
+  const [forceCreate, setForceCreate] = useState(false);
+  const { clients } = useClients();
+
+  // Detecta cadastro existente com o mesmo telefone (só pra cliente NOVO).
+  const duplicateMatch = useMemo<Client | null>(() => {
+    if (client) return null; // edição não checa
+    const key = normalizePhoneKey(formData.phone);
+    if (key.length < 10) return null;
+    return (
+      (clients as Client[]).find(
+        (c) => c.id !== client?.id && normalizePhoneKey(c.phone) === key,
+      ) ?? null
+    );
+  }, [client, formData.phone, clients]);
+
+  // Some o "criar mesmo assim" quando o match muda (telefone editado).
+  useEffect(() => {
+    setForceCreate(false);
+  }, [duplicateMatch?.id, open]);
 
   useEffect(() => {
     if (client) {
@@ -151,6 +181,9 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
     if (!formData.name?.trim()) return;
     if (!formData.phone?.trim()) return;
     if (!formData.email?.trim()) return;
+
+    // Cadastro novo com telefone já existente: bloqueia até o usuário decidir.
+    if (!client && duplicateMatch && !forceCreate) return;
 
     if (client) {
       onSubmit({ ...formData, id: client.id });
@@ -287,6 +320,43 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
                     </div>
                   </div>
                 </div>
+
+                {/* Aviso de cadastro duplicado (telefone já existe) */}
+                {duplicateMatch && (
+                  <div className="rounded-lg border border-amber-500 bg-amber-50 dark:bg-amber-950 p-3 text-sm space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
+                      <div>
+                        <strong>Já existe um cadastro com este telefone:</strong>{" "}
+                        <span className="font-semibold">{duplicateMatch.name}</span>.
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Pra não duplicar, use o cadastro que já existe.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 pl-6">
+                      {onUseExisting && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            onUseExisting(duplicateMatch.id);
+                            onOpenChange(false);
+                          }}
+                        >
+                          Usar este cadastro
+                        </Button>
+                      )}
+                      <label className="text-xs flex items-center gap-2">
+                        <Checkbox
+                          checked={forceCreate}
+                          onCheckedChange={(v) => setForceCreate(v === true)}
+                        />
+                        É outra pessoa — criar novo mesmo assim
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 {/* Gênero */}
                 <div className="space-y-2">
@@ -588,7 +658,11 @@ export function ClientModal({ open, onOpenChange, client, onSubmit, isLoading, i
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button
+                type="submit"
+                disabled={isLoading || (!client && !!duplicateMatch && !forceCreate)}
+                title={!client && duplicateMatch && !forceCreate ? "Telefone já cadastrado — use o cadastro existente ou marque 'criar novo mesmo assim'" : undefined}
+              >
                 {isLoading ? "Salvando..." : "Salvar"}
               </Button>
             </DialogFooter>

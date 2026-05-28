@@ -131,7 +131,12 @@ const SCALAR_TABLES: Array<{ table: string; column: string }> = [
   { table: "email_logs", column: "client_id" },
   { table: "stock_movements", column: "client_id" },
   { table: "comanda_deletions", column: "client_id" },
+  { table: "ads_events_log", column: "client_id" },
 ];
+
+// Tabelas com no máximo 1 linha por cliente (login do portal, atribuição Meta).
+// Não dá pra fazer UPDATE cego (violaria unicidade se o vencedor já tiver linha).
+const SINGLETON_TABLES = ["client_auth", "client_attribution"];
 
 const ARRAY_TABLES: Array<{ table: string; column: string }> = [
   { table: "email_campaigns", column: "target_client_ids" },
@@ -204,6 +209,30 @@ export function useMergeClients() {
       // 3) Substitui o id do perdedor nos arrays de campanhas
       for (const { table, column } of ARRAY_TABLES) {
         await reassignArrayColumn(table, column, loserId, winnerId, salonId);
+      }
+
+      // 3b) Tabelas singleton (1 linha por cliente): migra a do perdedor só se o
+      //     vencedor não tiver. Se o vencedor já tem, o ON DELETE CASCADE remove
+      //     a do perdedor junto com o cadastro (evita violar unicidade).
+      for (const table of SINGLETON_TABLES) {
+        const { data: winnerHas, error: selErr } = await supabase
+          .from(table)
+          .select("id")
+          .eq("client_id", winnerId)
+          .limit(1);
+        if (selErr) {
+          if (isMissingColumnError(selErr)) continue;
+          throw new Error(`Erro ao ler ${table}: ${selErr.message}`);
+        }
+        if (!winnerHas || winnerHas.length === 0) {
+          const { error } = await supabase
+            .from(table)
+            .update({ client_id: winnerId })
+            .eq("client_id", loserId);
+          if (error && !isMissingColumnError(error)) {
+            throw new Error(`Erro ao migrar ${table}: ${error.message}`);
+          }
+        }
       }
 
       // 4) Deleta o cliente perdedor (já não tem nenhuma FK apontando pra ele)
