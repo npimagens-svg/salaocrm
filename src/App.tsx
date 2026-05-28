@@ -35,7 +35,20 @@ import PortalAgendar from "./pages/cliente/PortalAgendar";
 import PortalAgendamentos from "./pages/cliente/PortalAgendamentos";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Dados de salão não mudam a cada segundo. Sem isso, toda navegação e
+      // todo foco de aba re-disparava TODAS as queries (staleTime=0 era o padrão).
+      // Mutações continuam chamando invalidateQueries, então o dado correto
+      // aparece na hora; o staleTime só evita refetch passivo redundante.
+      staleTime: 60 * 1000,
+      gcTime: 10 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
