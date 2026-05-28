@@ -74,12 +74,13 @@ export function useClientPortal() {
   const sb = getPortalClient();
   const [session, setSession] = useState<Session | null>(null);
   const [client, setClient] = useState<PortalClient | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
 
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setLoading(false);
+      setSessionReady(true);
     });
     const { data: sub } = sb.auth.onAuthStateChange((_e, s) => {
       setSession(s);
@@ -87,15 +88,23 @@ export function useClientPortal() {
     return () => sub.subscription.unsubscribe();
   }, [sb]);
 
+  // Carrega "me" SEMPRE que session muda. Mantém clientReady=false ENQUANTO
+  // carrega — assim o loading do hook só vira false depois do client estar
+  // pronto (ou da sessão não existir), evitando loop de redirect.
   useEffect(() => {
     if (!session) {
       setClient(null);
+      setClientReady(true);
       return;
     }
+    setClientReady(false);
     callApi("me", {}, session.access_token)
       .then((j) => setClient(j.client))
-      .catch(() => setClient(null));
+      .catch(() => setClient(null))
+      .finally(() => setClientReady(true));
   }, [session]);
+
+  const loading = !sessionReady || !clientReady;
 
   const lookupMatch = useCallback(
     async (phone?: string, cpf?: string, email?: string): Promise<MatchInfo | null> => {
