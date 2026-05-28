@@ -56,6 +56,7 @@ export const PERMISSION_FEATURES: PermissionFeature[] = [
   { key: "comandas_valores", label: "Comandas (Valor dos itens)", actions: ["edit"] },
   { key: "comissoes", label: "Comissões", actions: ["view", "edit"] },
   { key: "creditos_debitos", label: "Créditos e Débitos de Clientes", actions: ["edit", "delete"] },
+  { key: "contas_pagar", label: "Contas a Pagar", actions: ["view", "edit", "delete"] },
   { key: "dashboard", label: "Dashboard", actions: ["view"] },
   { key: "debito_troco", label: "Débito/Troco na Comanda", actions: ["edit"] },
   { key: "entradas_saidas", label: "Entradas e Saídas", actions: ["view", "edit", "delete"] },

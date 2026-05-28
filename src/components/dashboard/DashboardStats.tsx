@@ -234,14 +234,14 @@ export function DashboardStats({ professionalId }: DashboardStatsProps) {
 
   const stats = [
     {
-      title: isProfessional ? "Meu Faturamento" : "Faturamento do Mês",
+      title: isProfessional ? "Meu Faturamento (mês)" : "Faturamento do Mês",
       value: formatCurrency(data?.monthRevenue ?? 0),
       change: data?.revenueChange ?? 0,
       changeLabel: "vs mês anterior",
       icon: <DollarSign className="h-5 w-5 md:h-6 md:w-6" />,
     },
     {
-      title: isProfessional ? "Meus Atendimentos" : "Atendimentos do Mês",
+      title: isProfessional ? "Meus Atendimentos (mês)" : "Atendimentos do Mês",
       value: String(data?.monthAppts ?? 0),
       change: data?.apptsChange ?? 0,
       changeLabel: "vs mês anterior",

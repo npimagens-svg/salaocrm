@@ -1,6 +1,7 @@
 import { Calendar, UserPlus, Receipt, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useCurrentUserPermissions } from "@/hooks/useCurrentUserPermissions";
 
 const actions = [
   {
@@ -30,15 +31,21 @@ const actions = [
     description: "Registrar entrada",
     variant: "outline" as const,
     path: "/estoque",
+    // Estoque é administrativo: profissional comum não vê (só quem pode registrar).
+    permission: "estoque_entrada_saida.edit",
   },
 ];
 
 export function QuickActions() {
   const navigate = useNavigate();
+  const { hasPermission } = useCurrentUserPermissions();
+  const visibleActions = actions.filter(
+    (a) => !("permission" in a) || hasPermission((a as { permission: string }).permission),
+  );
 
   return (
     <div className="flex flex-wrap gap-3">
-      {actions.map((action) => (
+      {visibleActions.map((action) => (
         <Button
           key={action.label}
           variant={action.variant}

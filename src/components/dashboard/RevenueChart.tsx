@@ -15,11 +15,12 @@ import { useQuery } from "@tanstack/react-query";
 
 const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-export function RevenueChart() {
+export function RevenueChart({ professionalId }: { professionalId?: string | null }) {
   const { salonId } = useAuth();
+  const isProf = !!professionalId;
 
   const { data: chartData = [] } = useQuery({
-    queryKey: ["dashboard-revenue-chart", salonId],
+    queryKey: ["dashboard-revenue-chart", salonId, professionalId ?? "salon"],
     queryFn: async () => {
       if (!salonId) return [];
 
@@ -32,25 +33,12 @@ export function RevenueChart() {
       const sunday = new Date(monday);
       sunday.setDate(monday.getDate() + 7);
 
-      const { data: comandas } = await supabase
-        .from("comandas")
-        .select("total, closed_at")
-        .eq("salon_id", salonId)
-        .eq("is_paid", true)
-        .gte("closed_at", monday.toISOString())
-        .lt("closed_at", sunday.toISOString());
-
       // Build daily totals Mon-Sun
       const days = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(monday);
         d.setDate(monday.getDate() + i);
-        return {
-          date: d,
-          name: dayNames[(1 + i) % 7 === 0 ? 0 : (1 + i) % 7],
-          receita: 0,
-        };
+        return { date: d, name: "", receita: 0 };
       });
-      // Fix day names: Mon=1, Tue=2...Sun=0
       days[0].name = "Seg";
       days[1].name = "Ter";
       days[2].name = "Qua";
@@ -59,14 +47,32 @@ export function RevenueChart() {
       days[5].name = "Sáb";
       days[6].name = "Dom";
 
-      comandas?.forEach((c) => {
-        if (!c.closed_at) return;
-        const closedDate = new Date(c.closed_at);
-        const diffDays = Math.floor((closedDate.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays >= 0 && diffDays < 7) {
-          days[diffDays].receita += c.total || 0;
-        }
-      });
+      const bucket = (closedAt, value) => {
+        if (!closedAt) return;
+        const diffDays = Math.floor((new Date(closedAt).getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 0 && diffDays < 7) days[diffDays].receita += value || 0;
+      };
+
+      if (isProf) {
+        // Faturamento SÓ do profissional: soma os itens dele em comandas pagas da semana.
+        const { data: items } = await supabase
+          .from("comanda_items")
+          .select("total_price, comandas!inner(closed_at, is_paid)")
+          .eq("professional_id", professionalId)
+          .eq("comandas.is_paid", true)
+          .gte("comandas.closed_at", monday.toISOString())
+          .lt("comandas.closed_at", sunday.toISOString());
+        items?.forEach((it) => bucket(it.comandas?.closed_at, it.total_price || 0));
+      } else {
+        const { data: comandas } = await supabase
+          .from("comandas")
+          .select("total, closed_at")
+          .eq("salon_id", salonId)
+          .eq("is_paid", true)
+          .gte("closed_at", monday.toISOString())
+          .lt("closed_at", sunday.toISOString());
+        comandas?.forEach((c) => bucket(c.closed_at, c.total || 0));
+      }
 
       return days.map(({ name, receita }) => ({ name, receita }));
     },
@@ -78,7 +84,7 @@ export function RevenueChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Faturamento da Semana</CardTitle>
+        <CardTitle className="text-lg font-semibold">{isProf ? "Meu Faturamento da Semana" : "Faturamento da Semana"}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">

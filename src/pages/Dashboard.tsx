@@ -26,9 +26,9 @@ export default function Dashboard() {
 
         {/* Main Content Grid */}
         <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
-          {/* Revenue Chart - Takes 2 columns */}
+          {/* Revenue Chart - Takes 2 columns. Profissional vê só o próprio faturamento. */}
           <div className="lg:col-span-2">
-            <RevenueChart />
+            <RevenueChart professionalId={isProfessionalUser ? professionalId : undefined} />
           </div>
 
           {/* Commission Summary for professionals, Top Services for others */}
