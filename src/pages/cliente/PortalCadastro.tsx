@@ -112,6 +112,16 @@ export default function PortalCadastro() {
     }
   }
 
+  if (loading || isAuthenticated) {
+    return (
+      <ClientLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </ClientLayout>
+    );
+  }
+
   return (
     <ClientLayout>
       <Link to="/cliente" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4">
