@@ -1156,6 +1156,35 @@ CREATE INDEX idx_cip_comanda_item_id ON public.comanda_item_products(comanda_ite
 CREATE INDEX idx_cip_product_id ON public.comanda_item_products(product_id);
 
 -- ============================================================
+-- CONTAS A PAGAR
+-- ============================================================
+CREATE TYPE public.payable_status AS ENUM ('pending', 'paid', 'overdue', 'cancelled');
+CREATE TABLE public.accounts_payable (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  salon_id uuid NOT NULL,
+  supplier_id uuid REFERENCES public.suppliers(id) ON DELETE SET NULL,
+  nf_numero text, nf_serie text, nf_chave text,
+  parcela integer DEFAULT 1, total_parcelas integer DEFAULT 1,
+  valor_original numeric NOT NULL,
+  valor_pago numeric DEFAULT 0, juros numeric DEFAULT 0, desconto numeric DEFAULT 0,
+  emissao date, due_date date NOT NULL, paid_at timestamptz,
+  status public.payable_status NOT NULL DEFAULT 'pending',
+  description text NOT NULL,
+  category text DEFAULT 'Estoque',
+  payment_method text, bank_account_id uuid, financial_transaction_id uuid,
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_ap_salon ON public.accounts_payable(salon_id);
+CREATE INDEX idx_ap_due ON public.accounts_payable(due_date);
+ALTER TABLE public.accounts_payable ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view payables in their salon" ON public.accounts_payable FOR SELECT USING (salon_id = public.get_user_salon_id(auth.uid()));
+CREATE POLICY "Users can insert payables in their salon" ON public.accounts_payable FOR INSERT WITH CHECK (salon_id = public.get_user_salon_id(auth.uid()));
+CREATE POLICY "Users can update payables in their salon" ON public.accounts_payable FOR UPDATE USING (salon_id = public.get_user_salon_id(auth.uid()));
+CREATE POLICY "Users can delete payables in their salon" ON public.accounts_payable FOR DELETE USING (salon_id = public.get_user_salon_id(auth.uid()));
+
+-- ============================================================
 -- Schema criado com sucesso! Agora volte ao instalador.
 -- ============================================================
 `;

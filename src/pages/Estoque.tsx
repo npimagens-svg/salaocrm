@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Loader2, Package, AlertTriangle, Edit, Trash2, Truck, Globe, Phone, ArrowDownToLine, ArrowUpFromLine, Upload } from "lucide-react";
+import { Plus, Search, Loader2, Package, AlertTriangle, Edit, Trash2, Truck, Globe, Phone, ArrowDownToLine, ArrowUpFromLine, Upload, FileCode } from "lucide-react";
 import { useProducts } from "@/hooks/useProducts";
 import { useProductKits, ProductKit } from "@/hooks/useProductKits";
 import { useSuppliers, Supplier, SupplierInput } from "@/hooks/useSuppliers";
@@ -17,6 +17,7 @@ import { DeleteConfirmModal } from "@/components/modals/DeleteConfirmModal";
 import { StockEntryModal } from "@/components/modals/StockEntryModal";
 import { StockExitModal } from "@/components/modals/StockExitModal";
 import { ImportModal, ImportField } from "@/components/modals/ImportModal";
+import { StockImportModal } from "@/components/modals/StockImportModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/dynamicSupabaseClient";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +38,7 @@ export default function Estoque() {
   const [stockEntryModalOpen, setStockEntryModalOpen] = useState(false);
   const [stockExitModalOpen, setStockExitModalOpen] = useState(false);
   const [importProductsOpen, setImportProductsOpen] = useState(false);
+  const [stockImportOpen, setStockImportOpen] = useState(false);
   const [selectedKit, setSelectedKit] = useState<ProductKit | null>(null);
   const [deleteKitModalOpen, setDeleteKitModalOpen] = useState(false);
   const [kitToDelete, setKitToDelete] = useState<ProductKit | null>(null);
@@ -324,6 +326,12 @@ export default function Estoque() {
                       <ArrowUpFromLine className="h-4 w-4" />
                       Saída
                     </Button>
+                    {isMaster && (
+                      <Button variant="outline" className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => setStockImportOpen(true)}>
+                        <FileCode className="h-4 w-4" />
+                        Entrada por XML
+                      </Button>
+                    )}
                     {isMaster && (
                       <Button variant="outline" className="gap-2" onClick={() => setImportProductsOpen(true)}>
                         <Upload className="h-4 w-4" />
@@ -698,6 +706,13 @@ export default function Estoque() {
         description="Importe produtos de uma planilha XLS, XLSX ou CSV exportada de outro sistema."
         fields={productImportFields}
         onImport={handleImportProducts}
+      />
+
+      <StockImportModal
+        open={stockImportOpen}
+        onOpenChange={setStockImportOpen}
+        products={products}
+        suppliers={suppliers}
       />
     </AppLayoutNew>
   );
